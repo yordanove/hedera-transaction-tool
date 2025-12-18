@@ -9,12 +9,13 @@ import { htmlReport } from 'https://raw.githubusercontent.com/benc-uk/k6-reporte
 import http from 'k6/http';
 import { check, group, sleep } from 'k6';
 import { Trend, Rate } from 'k6/metrics';
-import { login, authHeaders, formatDuration } from '../lib/helpers';
+import { authHeaders, formatDuration } from '../lib/helpers';
+import { standardSetup } from '../lib/setup';
 import { formatDataMetrics, needed_properties } from '../lib/utils';
+import { getBaseUrlWithFallback } from '../config/credentials';
 import { endpoints } from '../config/environments';
+import { THRESHOLDS, DELAYS, HTTP_STATUS } from '../config/constants';
 import type { K6Options, SetupData, SummaryData, SummaryOutput, TabConfig } from '../types';
-
-declare const __ENV: Record<string, string | undefined>;
 
 // Custom metrics per tab
 const readyToSignDuration = new Trend('tab_ready_to_sign_duration');
@@ -27,12 +28,14 @@ const notificationsDuration = new Trend('tab_notifications_duration');
 
 const tabLoadSuccess = new Rate('tab_load_success');
 
+// Threshold string for all tabs
+const tabThreshold = [`${THRESHOLDS.P95_PERCENTILE}<${THRESHOLDS.PAGE_LOAD_MS}`];
+
 /**
  * k6 options configuration
  */
 export const options: K6Options = {
   scenarios: {
-    // Single user baseline
     baseline: {
       executor: 'constant-vus',
       vus: 1,
@@ -41,20 +44,18 @@ export const options: K6Options = {
     },
   },
   thresholds: {
-    tab_ready_to_sign_duration: ['p(95)<1000'],
-    tab_ready_to_approve_duration: ['p(95)<1000'],
-    tab_in_progress_duration: ['p(95)<1000'],
-    tab_ready_for_execution_duration: ['p(95)<1000'],
-    tab_all_transactions_duration: ['p(95)<1000'],
-    tab_history_duration: ['p(95)<1000'],
-    tab_notifications_duration: ['p(95)<1000'],
+    tab_ready_to_sign_duration: tabThreshold,
+    tab_ready_to_approve_duration: tabThreshold,
+    tab_in_progress_duration: tabThreshold,
+    tab_ready_for_execution_duration: tabThreshold,
+    tab_all_transactions_duration: tabThreshold,
+    tab_history_duration: tabThreshold,
+    tab_notifications_duration: tabThreshold,
     tab_load_success: ['rate>0.99'],
   },
 };
 
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:3001';
-const USER_EMAIL = __ENV.USER_EMAIL || 'admin@test.com';
-const USER_PASSWORD = __ENV.USER_PASSWORD || '1234567890';
+const BASE_URL = getBaseUrlWithFallback();
 
 const TABS: TabConfig[] = [
   {
@@ -105,13 +106,11 @@ const TABS: TabConfig[] = [
  * Setup function - authenticates and returns token
  */
 export function setup(): SetupData {
-  const token = login(BASE_URL, USER_EMAIL, USER_PASSWORD);
-  if (!token) {
-    console.error('Failed to authenticate - check credentials');
-    return { token: null };
+  const data = standardSetup(BASE_URL);
+  if (data.token) {
+    console.log('Authentication successful');
   }
-  console.log('Authentication successful');
-  return { token };
+  return data;
 }
 
 /**
@@ -134,13 +133,13 @@ export default function (data: SetupData): void {
         tags: { name: tab.tag },
       });
 
-      const success = res.status === 200;
+      const success = res.status === HTTP_STATUS.OK;
       tabLoadSuccess.add(success);
       tab.metric.add(res.timings.duration);
 
       check(res, {
-        [`${tab.name} status 200`]: (r) => r.status === 200,
-        [`${tab.name} response < 1s`]: (r) => r.timings.duration < 1000,
+        [`${tab.name} status 200`]: (r) => r.status === HTTP_STATUS.OK,
+        [`${tab.name} response < 1s`]: (r) => r.timings.duration < THRESHOLDS.PAGE_LOAD_MS,
       });
 
       if (!success) {
@@ -149,10 +148,10 @@ export default function (data: SetupData): void {
       }
     });
 
-    sleep(0.5); // Small delay between tabs
+    sleep(DELAYS.BETWEEN_TABS);
   });
 
-  sleep(1); // Delay between iterations
+  sleep(DELAYS.BETWEEN_ITERATIONS);
 }
 
 /**

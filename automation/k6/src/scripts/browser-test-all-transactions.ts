@@ -20,7 +20,6 @@ export const options: K6Options = {
       executor: 'constant-vus',
       vus: 1,
       duration: '10s',
-      // Note: browser options are handled by k6 runtime
     },
   },
 };

@@ -73,3 +73,20 @@ export interface AuthHeaders {
     Authorization: string;
   };
 }
+
+/**
+ * Pre-signed transaction from signature helper
+ */
+export interface PreSignedTransaction {
+  signatures: unknown[];
+}
+
+/**
+ * Pre-signed data loaded from signatures file
+ */
+export interface PreSignedData {
+  count?: number;
+  signatureCount?: number;
+  signatures?: unknown[];
+  transactions?: PreSignedTransaction[];
+}

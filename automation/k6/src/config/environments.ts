@@ -5,6 +5,7 @@
  */
 
 import type { Environment, EnvironmentMap, Endpoints } from '../types';
+import { PAGINATION, DATA_VOLUMES } from './constants';
 
 declare const __ENV: Record<string, string | undefined>;
 
@@ -21,10 +22,23 @@ export const ENVIRONMENTS: EnvironmentMap = {
     name: 'Staging',
   },
   prod: {
-    baseUrl: 'TBD', // Update when production URL available
+    baseUrl: '',
     name: 'Production',
   },
 };
+
+/**
+ * Build endpoint URL with pagination parameters
+ */
+function buildEndpoint(
+  path: string,
+  pageSize: number = PAGINATION.DEFAULT_SIZE,
+  filter?: string,
+): string {
+  let url = `${path}?page=${PAGINATION.DEFAULT_PAGE}&size=${pageSize}`;
+  if (filter) url += `&filter=${filter}`;
+  return url;
+}
 
 // Cache to ensure we only log once
 let _logged = false;
@@ -64,13 +78,14 @@ export const BASE_URL: string = __ENV.BASE_URL || getEnvironment().baseUrl;
 
 /**
  * API endpoints for page load tests
+ * Page sizes based on performance requirements
  */
 export const endpoints: Endpoints = {
-  'all-transactions': '/transactions?page=1&size=100',
-  'history': '/transactions/history?page=1&size=100',
-  'in-progress': '/transactions?page=1&size=100&filter=status:in:WAITING FOR SIGNATURES',
-  'notifications': '/notifications?page=1&size=100',
-  'ready-for-execution': '/transactions?page=1&size=100&filter=status:in:WAITING FOR EXECUTION',
-  'ready-to-approve': '/transactions/approve?page=1&size=100',
-  'ready-to-sign': '/transactions/sign?page=1&size=100',
+  'all-transactions': buildEndpoint('/transactions'),
+  'history': buildEndpoint('/transactions/history', DATA_VOLUMES.HISTORY),
+  'in-progress': buildEndpoint('/transactions', PAGINATION.DEFAULT_SIZE, 'status:in:WAITING FOR SIGNATURES'),
+  'notifications': buildEndpoint('/notifications'),
+  'ready-for-execution': buildEndpoint('/transactions', PAGINATION.DEFAULT_SIZE, 'status:in:WAITING FOR EXECUTION'),
+  'ready-to-approve': buildEndpoint('/transactions/approve'),
+  'ready-to-sign': buildEndpoint('/transactions/sign', DATA_VOLUMES.READY_TO_SIGN),
 };

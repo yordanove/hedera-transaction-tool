@@ -11,51 +11,41 @@
 import { htmlReport } from 'https://raw.githubusercontent.com/benc-uk/k6-reporter/main/dist/bundle.js';
 import http from 'k6/http';
 import { check, sleep, group } from 'k6';
-import { login, authHeaders, formatDuration } from '../lib/helpers';
+import { authHeaders, formatDuration } from '../lib/helpers';
+import { standardSetup } from '../lib/setup';
 import { formatDataMetrics, needed_properties, textSummary } from '../lib/utils';
+import { getBaseUrlWithFallback } from '../config/credentials';
 import { endpoints } from '../config/environments';
+import { THRESHOLDS, DELAYS, HTTP_STATUS } from '../config/constants';
+import { STANDARD_LOAD_STAGES, TAB_LOAD_THRESHOLDS } from '../config/load-profiles';
 import type { K6Options, SetupData, SummaryData, SummaryOutput } from '../types';
-
-declare const __ENV: Record<string, string | undefined>;
 
 /**
  * k6 options configuration
  */
 export const options: K6Options = {
   scenarios: {
-    // 100+ concurrent users load test
     load: {
       executor: 'ramping-vus',
       startVUs: 0,
-      stages: [
-        { duration: '1m', target: 50 },
-        { duration: '2m', target: 100 },
-        { duration: '3m', target: 100 },
-        { duration: '1m', target: 0 },
-      ],
+      stages: STANDARD_LOAD_STAGES,
       tags: { scenario: 'load' },
     },
   },
   thresholds: {
-    'http_req_duration{name:ready-to-sign}': ['p(95)<1000'],
-    'http_req_duration{name:sign-transaction}': ['p(95)<4000'],
-    http_req_failed: ['rate<0.01'],
+    'http_req_duration{name:ready-to-sign}': [`${THRESHOLDS.P95_PERCENTILE}<${THRESHOLDS.PAGE_LOAD_MS}`],
+    'http_req_duration{name:sign-transaction}': [`${THRESHOLDS.P95_PERCENTILE}<${THRESHOLDS.SIGN_ALL_MS}`],
+    ...TAB_LOAD_THRESHOLDS,
   },
 };
 
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:3001';
-const USER_EMAIL = __ENV.USER_EMAIL || 'admin@test.com';
-const USER_PASSWORD = __ENV.USER_PASSWORD || '1234567890';
+const BASE_URL = getBaseUrlWithFallback();
 
 /**
  * Setup function - authenticates and returns token
  */
 export function setup(): SetupData {
-  const token = login(BASE_URL, USER_EMAIL, USER_PASSWORD);
-  if (!token) {
-    console.error('Failed to authenticate');
-  }
-  return { token };
+  return standardSetup(BASE_URL);
 }
 
 /**
@@ -74,14 +64,14 @@ export default function (data: SetupData): void {
     });
 
     check(res, {
-      'ready-to-sign status 200': (r) => r.status === 200,
-      'ready-to-sign response < 1s': (r) => r.timings.duration < 1000,
+      'ready-to-sign status 200': (r) => r.status === HTTP_STATUS.OK,
+      'ready-to-sign response < 1s': (r) => r.timings.duration < THRESHOLDS.PAGE_LOAD_MS,
     });
 
     console.log(`Ready to Sign load time: ${formatDuration(res.timings.duration)}`);
   });
 
-  sleep(1);
+  sleep(DELAYS.BETWEEN_ITERATIONS);
 }
 
 /**

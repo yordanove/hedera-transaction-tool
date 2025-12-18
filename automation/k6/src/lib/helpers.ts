@@ -1,62 +1,24 @@
 /**
  * k6 Test Helpers
  *
- * Authentication, HTTP utilities, and multi-user support for k6 tests.
+ * Authentication, HTTP utilities, and formatting for k6 tests.
  */
 
 import http, { Response } from 'k6/http';
 import type { TestUser, AuthHeaders, AuthResponse } from '../types';
-
-// k6 environment variables
-declare const __ENV: Record<string, string | undefined>;
-declare const __VU: number;
-
-/**
- * Multi-user support
- * Distribute test users across virtual users to prevent auth conflicts
- * Set via environment variables: TEST_EMAIL, TEST_EMAIL_1, TEST_EMAIL_2, etc.
- */
-function getTestUsers(): TestUser[] {
-  const users: TestUser[] = [];
-
-  // Primary user
-  if (__ENV.TEST_EMAIL && __ENV.TEST_PASSWORD) {
-    users.push({
-      email: __ENV.TEST_EMAIL,
-      password: __ENV.TEST_PASSWORD,
-    });
-  }
-
-  // Additional users (TEST_EMAIL_1, TEST_EMAIL_2, etc.)
-  for (let i = 1; i <= 10; i++) {
-    const email = __ENV[`TEST_EMAIL_${i}`];
-    const password = __ENV[`TEST_PASSWORD_${i}`] || __ENV.TEST_PASSWORD;
-    if (email && password) {
-      users.push({ email, password });
-    }
-  }
-
-  return users;
-}
-
-// Cache test users
-const TEST_USERS = getTestUsers();
+import { getCredentialsForVU, type TestCredentials } from '../config/credentials';
+import { HTTP_STATUS, THRESHOLDS } from '../config/constants';
 
 /**
  * Get test user for current VU
  * Distributes users evenly across VUs to prevent auth conflicts
  */
 export function getTestUser(): TestUser {
-  if (TEST_USERS.length === 0) {
-    return {
-      email: __ENV.USER_EMAIL || 'test@example.com',
-      password: __ENV.USER_PASSWORD || 'password',
-    };
-  }
-
-  // Distribute users across VUs: VU 1 gets user 0, VU 2 gets user 1, etc.
-  const userIndex = (__VU - 1) % TEST_USERS.length;
-  return TEST_USERS[userIndex];
+  const creds: TestCredentials = getCredentialsForVU();
+  return {
+    email: creds.email,
+    password: creds.password,
+  };
 }
 
 /**
@@ -80,7 +42,7 @@ export function login(
 
   const res: Response = http.post(`${baseUrl}/auth/login`, payload, params);
 
-  if (res.status === 200 || res.status === 201) {
+  if (res.status === HTTP_STATUS.OK || res.status === HTTP_STATUS.CREATED) {
     try {
       const body = JSON.parse(res.body as string) as AuthResponse;
       return body.accessToken || null;
@@ -119,8 +81,8 @@ export function authHeaders(token: string): AuthHeaders {
  * Format duration for logging
  */
 export function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(2)}s`;
+  if (ms < THRESHOLDS.PAGE_LOAD_MS) return `${ms}ms`;
+  return `${(ms / THRESHOLDS.PAGE_LOAD_MS).toFixed(2)}s`;
 }
 
 /**

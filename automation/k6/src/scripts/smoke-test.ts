@@ -7,9 +7,9 @@
 
 import http from 'k6/http';
 import { check, sleep } from 'k6';
+import { getBaseUrlWithFallback } from '../config/credentials';
+import { DELAYS, HTTP_STATUS } from '../config/constants';
 import type { K6Options, SummaryData, SummaryOutput } from '../types';
-
-declare const __ENV: Record<string, string | undefined>;
 
 /**
  * k6 options - smoke test configuration
@@ -18,13 +18,12 @@ export const options: K6Options = {
   vus: 1,
   duration: '30s',
   thresholds: {
-    http_req_duration: ['p(95)<2000'], // 95% of requests under 2s
-    checks: ['rate>0.99'], // 99% of checks must pass
+    http_req_duration: ['p(95)<2000'],
+    checks: ['rate>0.99'],
   },
 };
 
-// Staging URL pending from Hedera (use -e BASE_URL=... to override)
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:3001';
+const BASE_URL = getBaseUrlWithFallback();
 
 /**
  * Main test function - runs for each VU iteration
@@ -34,11 +33,12 @@ export default function (): void {
   const apiRes = http.get(`${BASE_URL}/users`);
 
   check(apiRes, {
-    'API responds (even if 401)': (r) => r.status === 200 || r.status === 401,
+    'API responds (even if 401)': (r) =>
+      r.status === HTTP_STATUS.OK || r.status === HTTP_STATUS.UNAUTHORIZED,
     'response time < 500ms': (r) => r.timings.duration < 500,
   });
 
-  sleep(1);
+  sleep(DELAYS.BETWEEN_ITERATIONS);
 }
 
 /**

@@ -6,6 +6,11 @@
  *
  * Usage:
  *   cd automation && npx tsx k6/helpers/seed-test-users.ts
+ *
+ * Environment variables:
+ *   TEST_USER_EMAIL    - User email (required)
+ *   TEST_USER_PASSWORD - User password (required)
+ *   TEST_USER_ADMIN    - Set to 'true' for admin (default: true)
  */
 
 import { Client, QueryResult } from 'pg';
@@ -21,11 +26,25 @@ interface UserRow {
   id: number;
 }
 
-const TEST_USER: TestUser = {
-  email: 'admin@test.com',
-  password: '1234567890',
-  isAdmin: true,
-};
+function getTestUser(): TestUser {
+  const email = process.env.TEST_USER_EMAIL;
+  const password = process.env.TEST_USER_PASSWORD;
+
+  if (!email || !password) {
+    console.error('Error: TEST_USER_EMAIL and TEST_USER_PASSWORD environment variables are required');
+    console.log('\nUsage:');
+    console.log('  TEST_USER_EMAIL=admin@test.com TEST_USER_PASSWORD=yourpassword npx tsx k6/helpers/seed-test-users.ts');
+    process.exit(1);
+  }
+
+  return {
+    email,
+    password,
+    isAdmin: process.env.TEST_USER_ADMIN !== 'false',
+  };
+}
+
+const TEST_USER = getTestUser();
 
 async function hashPassword(password: string): Promise<string> {
   return await argon2.hash(password, {
