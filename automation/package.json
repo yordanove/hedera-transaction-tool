@@ -26,7 +26,7 @@
     "k6:notifications:grafana": "npm run k6:build && k6 run --out influxdb=http://localhost:8086/k6 k6/dist/notifications.js",
     "k6:sign-all": "npm run k6:build && k6 run k6/dist/sign-all.js",
     "k6:sign-all:grafana": "npm run k6:build && k6 run --out influxdb=http://localhost:8086/k6 k6/dist/sign-all.js",
-    "k6:seed": "node k6/helpers/seed-test-users.js",
+    "k6:seed": "tsx k6/helpers/seed-test-users.ts",
     "k6:perf": "npm run k6:seed && npm run k6:build && k6 run -e USER_EMAIL=admin@test.com -e USER_PASSWORD=1234567890 k6/dist/tab-load-times.js"
   },
   "main": "playwright.config.js",
@@ -60,6 +60,7 @@
     "@types/k6": "^1.4.0",
     "glob": "^13.0.0",
     "ts-loader": "^9.5.4",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "webpack": "^5.104.0",
     "webpack-cli": "^6.0.1"
