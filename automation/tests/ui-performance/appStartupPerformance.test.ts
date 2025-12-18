@@ -5,10 +5,10 @@
  * Measures time from app launch to interactive state
  */
 
-const { test, expect } = require('playwright/test');
-const { _electron: electron } = require('playwright');
-const { resetDbState } = require('../../utils/databaseUtil');
-const { formatDuration } = require('./performanceUtils');
+import { test, expect, ElectronApplication } from '@playwright/test';
+import { _electron as electron } from 'playwright';
+import { resetDbState } from '../../utils/databaseUtil.js';
+import { formatDuration } from './performanceUtils.js';
 
 // TBD - waiting for Hedera to confirm threshold
 const TARGET_STARTUP_TIME_MS = 3000;
@@ -26,7 +26,7 @@ test.describe('App Startup Performance', () => {
     const startTime = Date.now();
 
     // Launch the Electron app
-    const app = await electron.launch({
+    const app: ElectronApplication = await electron.launch({
       executablePath: process.env.EXECUTABLE_PATH,
     });
 
@@ -54,7 +54,7 @@ test.describe('App Startup Performance', () => {
   test('App reaches interactive state quickly', async () => {
     const startTime = Date.now();
 
-    const app = await electron.launch({
+    const app: ElectronApplication = await electron.launch({
       executablePath: process.env.EXECUTABLE_PATH,
     });
 

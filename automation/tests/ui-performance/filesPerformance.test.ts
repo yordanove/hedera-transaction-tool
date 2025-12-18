@@ -5,20 +5,22 @@
  * Data source: Local SQLite (HederaFile model)
  */
 
-const { test, expect } = require('playwright/test');
-const { setupApp, closeApp } = require('../../utils/util');
-const { resetDbState } = require('../../utils/databaseUtil');
-const LoginPage = require('../../pages/LoginPage');
-const RegistrationPage = require('../../pages/RegistrationPage');
-const {
+import { test, expect, ElectronApplication, Page } from '@playwright/test';
+import { setupApp, closeApp } from '../../utils/util.js';
+import { resetDbState } from '../../utils/databaseUtil.js';
+import { LoginPage } from '../../pages/LoginPage.js';
+import { RegistrationPage } from '../../pages/RegistrationPage.js';
+import {
   TARGET_LOAD_TIME_MS,
   measurePageLoadTime,
   formatDuration,
   assertLoadTime,
-} = require('./performanceUtils');
+} from './performanceUtils.js';
 
-let app, window;
-let loginPage, registrationPage;
+let app: ElectronApplication;
+let window: Page;
+let loginPage: LoginPage;
+let registrationPage: RegistrationPage;
 
 test.describe('Files Page Performance', () => {
   test.beforeAll(async () => {

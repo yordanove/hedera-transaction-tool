@@ -5,20 +5,22 @@
  * Data source: Local SQLite (TransactionDraft model)
  */
 
-const { test, expect } = require('playwright/test');
-const { setupApp, closeApp } = require('../../utils/util');
-const { resetDbState } = require('../../utils/databaseUtil');
-const LoginPage = require('../../pages/LoginPage');
-const RegistrationPage = require('../../pages/RegistrationPage');
-const {
+import { test, expect, ElectronApplication, Page } from '@playwright/test';
+import { setupApp, closeApp } from '../../utils/util.js';
+import { resetDbState } from '../../utils/databaseUtil.js';
+import { LoginPage } from '../../pages/LoginPage.js';
+import { RegistrationPage } from '../../pages/RegistrationPage.js';
+import {
   TARGET_LOAD_TIME_MS,
   measurePageLoadTime,
   formatDuration,
   assertLoadTime,
-} = require('./performanceUtils');
+} from './performanceUtils.js';
 
-let app, window;
-let loginPage, registrationPage;
+let app: ElectronApplication;
+let window: Page;
+let loginPage: LoginPage;
+let registrationPage: RegistrationPage;
 
 test.describe('Drafts Page Performance', () => {
   test.beforeAll(async () => {
@@ -59,12 +61,14 @@ test.describe('Drafts Page Performance', () => {
 
     // Measure render time
     const startTime = Date.now();
-    await window.waitForSelector('[data-testid^="span-draft-tx"]', {
-      state: 'visible',
-      timeout: TARGET_LOAD_TIME_MS + 1000,
-    }).catch(() => {
-      // No drafts yet - that's ok for this test
-    });
+    await window
+      .waitForSelector('[data-testid^="span-draft-tx"]', {
+        state: 'visible',
+        timeout: TARGET_LOAD_TIME_MS + 1000,
+      })
+      .catch(() => {
+        // No drafts yet - that's ok for this test
+      });
     const renderTime = Date.now() - startTime;
 
     console.log(`Drafts list render time: ${formatDuration(renderTime)}`);
