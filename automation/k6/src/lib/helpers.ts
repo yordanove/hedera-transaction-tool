@@ -1,12 +1,23 @@
-import http from 'k6/http';
+/**
+ * k6 Test Helpers
+ *
+ * Authentication, HTTP utilities, and multi-user support for k6 tests.
+ */
+
+import http, { Response } from 'k6/http';
+import type { TestUser, AuthHeaders, AuthResponse } from '../types';
+
+// k6 environment variables
+declare const __ENV: Record<string, string | undefined>;
+declare const __VU: number;
 
 /**
  * Multi-user support
  * Distribute test users across virtual users to prevent auth conflicts
  * Set via environment variables: TEST_EMAIL, TEST_EMAIL_1, TEST_EMAIL_2, etc.
  */
-function getTestUsers() {
-  const users = [];
+function getTestUsers(): TestUser[] {
+  const users: TestUser[] = [];
 
   // Primary user
   if (__ENV.TEST_EMAIL && __ENV.TEST_PASSWORD) {
@@ -20,7 +31,7 @@ function getTestUsers() {
   for (let i = 1; i <= 10; i++) {
     const email = __ENV[`TEST_EMAIL_${i}`];
     const password = __ENV[`TEST_PASSWORD_${i}`] || __ENV.TEST_PASSWORD;
-    if (email) {
+    if (email && password) {
       users.push({ email, password });
     }
   }
@@ -34,9 +45,8 @@ const TEST_USERS = getTestUsers();
 /**
  * Get test user for current VU
  * Distributes users evenly across VUs to prevent auth conflicts
- * @returns {{ email: string, password: string } | null}
  */
-export function getTestUser() {
+export function getTestUser(): TestUser {
   if (TEST_USERS.length === 0) {
     return {
       email: __ENV.USER_EMAIL || 'test@example.com',
@@ -52,7 +62,11 @@ export function getTestUser() {
 /**
  * Authenticate and return auth token
  */
-export function login(baseUrl, email, password) {
+export function login(
+  baseUrl: string,
+  email: string,
+  password: string,
+): string | null {
   const payload = JSON.stringify({
     email: email,
     password: password,
@@ -64,14 +78,15 @@ export function login(baseUrl, email, password) {
     },
   };
 
-  const res = http.post(`${baseUrl}/auth/login`, payload, params);
+  const res: Response = http.post(`${baseUrl}/auth/login`, payload, params);
 
   if (res.status === 200 || res.status === 201) {
     try {
-      const body = JSON.parse(res.body);
-      return body.accessToken || body.token;
+      const body = JSON.parse(res.body as string) as AuthResponse;
+      return body.accessToken || null;
     } catch (e) {
-      console.error(`Failed to parse login response: ${e.message}`);
+      const error = e as Error;
+      console.error(`Failed to parse login response: ${error.message}`);
       return null;
     }
   }
@@ -83,7 +98,7 @@ export function login(baseUrl, email, password) {
 /**
  * Login with auto-selected test user for current VU
  */
-export function loginAsTestUser(baseUrl) {
+export function loginAsTestUser(baseUrl: string): string | null {
   const user = getTestUser();
   return login(baseUrl, user.email, user.password);
 }
@@ -91,7 +106,7 @@ export function loginAsTestUser(baseUrl) {
 /**
  * Create authenticated request headers
  */
-export function authHeaders(token) {
+export function authHeaders(token: string): AuthHeaders {
   return {
     headers: {
       'Content-Type': 'application/json',
@@ -103,7 +118,7 @@ export function authHeaders(token) {
 /**
  * Format duration for logging
  */
-export function formatDuration(ms) {
+export function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(2)}s`;
 }
@@ -111,6 +126,6 @@ export function formatDuration(ms) {
 /**
  * Random sleep helper (returns seconds for k6 sleep)
  */
-export function randomSleep(min, max) {
+export function randomSleep(min: number, max: number): number {
   return Math.random() * (max - min) + min;
 }

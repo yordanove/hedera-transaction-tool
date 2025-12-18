@@ -7,8 +7,12 @@
 
 import { test, expect, ElectronApplication } from '@playwright/test';
 import { _electron as electron } from 'playwright';
+import * as dotenv from 'dotenv';
 import { resetDbState } from '../../utils/databaseUtil.js';
 import { formatDuration } from './performanceUtils.js';
+
+// Load environment variables from .env file
+dotenv.config();
 
 // TBD - waiting for Hedera to confirm threshold
 const TARGET_STARTUP_TIME_MS = 3000;

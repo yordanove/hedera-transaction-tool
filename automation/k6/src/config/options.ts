@@ -1,9 +1,18 @@
-// config/options.js
-// Reusable load test profiles
-export { BASE_URL, getEnvironment, logEnvironment, ENVIRONMENTS } from './environments.js';
+/**
+ * Load Test Options
+ *
+ * Reusable k6 load test profiles and configurations.
+ */
 
-// Smoke test - quick health check
-export const smokeOptions = {
+import type { K6Options } from '../types';
+
+// Re-export environment utilities
+export { BASE_URL, getEnvironment, logEnvironment, ENVIRONMENTS, endpoints } from './environments';
+
+/**
+ * Smoke test - quick health check
+ */
+export const smokeOptions: K6Options = {
   vus: 1,
   duration: '30s',
   thresholds: {
@@ -12,8 +21,10 @@ export const smokeOptions = {
   },
 };
 
-// Load test - normal expected traffic
-export const loadOptions = {
+/**
+ * Load test - normal expected traffic
+ */
+export const loadOptions: K6Options = {
   stages: [
     { duration: '1m', target: 50 },
     { duration: '3m', target: 50 },
@@ -27,8 +38,10 @@ export const loadOptions = {
   },
 };
 
-// Stress test - find breaking point
-export const stressOptions = {
+/**
+ * Stress test - find breaking point
+ */
+export const stressOptions: K6Options = {
   stages: [
     { duration: '2m', target: 100 },
     { duration: '5m', target: 200 },
@@ -42,8 +55,10 @@ export const stressOptions = {
   },
 };
 
-// Spike test - sudden burst of traffic
-export const spikeOptions = {
+/**
+ * Spike test - sudden burst of traffic
+ */
+export const spikeOptions: K6Options = {
   stages: [
     { duration: '10s', target: 10 },
     { duration: '1m', target: 500 },
@@ -57,8 +72,10 @@ export const spikeOptions = {
   },
 };
 
-// Sign-all specific - batch operation
-export const signAllOptions = {
+/**
+ * Sign-all specific - batch operation test
+ */
+export const signAllOptions: K6Options = {
   scenarios: {
     signAll: {
       executor: 'shared-iterations',

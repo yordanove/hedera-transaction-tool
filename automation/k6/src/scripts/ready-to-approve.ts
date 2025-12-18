@@ -1,11 +1,4 @@
-import { htmlReport } from 'https://raw.githubusercontent.com/benc-uk/k6-reporter/main/dist/bundle.js';
-import http from 'k6/http';
-import { check, sleep, group } from 'k6';
-import { login, authHeaders, formatDuration } from '../lib/helpers.js';
-import { formatDataMetrics, needed_properties } from '../helpers/utils.js';
-import { endpoints } from '../config/environments.js';
-
-/*
+/**
  * Ready to Approve Load Test
  *
  * Requirements:
@@ -13,7 +6,20 @@ import { endpoints } from '../config/environments.js';
  * - 100+ concurrent users
  */
 
-export const options = {
+import { htmlReport } from 'https://raw.githubusercontent.com/benc-uk/k6-reporter/main/dist/bundle.js';
+import http from 'k6/http';
+import { check, sleep, group } from 'k6';
+import { login, authHeaders, formatDuration } from '../lib/helpers';
+import { formatDataMetrics, needed_properties } from '../lib/utils';
+import { endpoints } from '../config/environments';
+import type { K6Options, SetupData, SummaryData, SummaryOutput, TextSummaryOptions } from '../types';
+
+declare const __ENV: Record<string, string | undefined>;
+
+/**
+ * k6 options configuration
+ */
+export const options: K6Options = {
   scenarios: {
     load: {
       executor: 'ramping-vus',
@@ -37,7 +43,10 @@ const BASE_URL = __ENV.BASE_URL || 'http://localhost:3001';
 const USER_EMAIL = __ENV.USER_EMAIL || 'admin@test.com';
 const USER_PASSWORD = __ENV.USER_PASSWORD || '1234567890';
 
-export function setup() {
+/**
+ * Setup function - authenticates and returns token
+ */
+export function setup(): SetupData {
   const token = login(BASE_URL, USER_EMAIL, USER_PASSWORD);
   if (!token) {
     console.error('Failed to authenticate');
@@ -45,8 +54,13 @@ export function setup() {
   return { token };
 }
 
-export default function (data) {
+/**
+ * Main test function
+ */
+export default function (data: SetupData): void {
   const { token } = data;
+  if (!token) return;
+
   const headers = authHeaders(token);
 
   group('Ready to Approve Page', () => {
@@ -56,8 +70,8 @@ export default function (data) {
     });
 
     check(res, {
-      'ready-to-approve status 200': r => r.status === 200,
-      'ready-to-approve response < 1s': r => r.timings.duration < 1000,
+      'ready-to-approve status 200': (r) => r.status === 200,
+      'ready-to-approve response < 1s': (r) => r.timings.duration < 1000,
     });
 
     console.log(`Ready to Approve load time: ${formatDuration(res.timings.duration)}`);
@@ -66,7 +80,10 @@ export default function (data) {
   sleep(1);
 }
 
-function textSummary(data, opts) {
+/**
+ * Generate text summary for console output
+ */
+function textSummary(data: SummaryData, _opts: TextSummaryOptions): string {
   const metrics = data.metrics;
   let output = '\n=== Ready to Approve Performance Summary ===\n\n';
 
@@ -81,7 +98,10 @@ function textSummary(data, opts) {
   return output;
 }
 
-export function handleSummary(data) {
+/**
+ * Generate summary report
+ */
+export function handleSummary(data: SummaryData): SummaryOutput {
   formatDataMetrics(data, needed_properties);
 
   return {

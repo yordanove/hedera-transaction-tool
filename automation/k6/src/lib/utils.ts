@@ -1,4 +1,18 @@
-export function formatDataMetrics(data, fields) {
+/**
+ * k6 Reporting Utilities
+ *
+ * Helpers for formatting k6 metrics and generating reports.
+ */
+
+import type { SummaryData, MetricPropertyMap } from '../types';
+
+/**
+ * Rename metric properties in summary data for cleaner reports
+ */
+export function formatDataMetrics(
+  data: SummaryData,
+  fields: MetricPropertyMap,
+): void {
   for (const property in fields) {
     if (data.metrics[property]) {
       data.metrics[fields[property]] = data.metrics[property];
@@ -7,7 +21,10 @@ export function formatDataMetrics(data, fields) {
   }
 }
 
-export const needed_properties = {
+/**
+ * Standard metric property mappings for HTML reports
+ */
+export const needed_properties: MetricPropertyMap = {
   'iteration_duration': 'Iteration Duration',
   'http_req_waiting': 'HTTP Request Waiting',
   'http_req_tls_handshaking': 'HTTP Request TLS handshaking',

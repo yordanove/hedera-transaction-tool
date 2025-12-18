@@ -3,6 +3,9 @@ reports/
 *.json.gz
 *.html
 
+# Compiled TypeScript output
+dist/
+
 # Environment files with credentials
 .env
 *.local.json

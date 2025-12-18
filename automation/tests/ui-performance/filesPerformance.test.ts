@@ -72,6 +72,6 @@ test.describe('Files Page Performance', () => {
     const renderTime = Date.now() - startTime;
     console.log(`Files list render time: ${formatDuration(renderTime)}`);
 
-    expect(renderTime).toBeLessThan(TARGET_LOAD_TIME_MS + 500);
+    expect(renderTime).toBeLessThan(TARGET_LOAD_TIME_MS);
   });
 });

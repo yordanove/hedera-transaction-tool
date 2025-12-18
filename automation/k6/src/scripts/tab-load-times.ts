@@ -1,16 +1,20 @@
+/**
+ * Tab Load Times Performance Test
+ *
+ * Baseline test for all main UI tabs.
+ * Measures API response times for each tab's data endpoint.
+ */
+
 import { htmlReport } from 'https://raw.githubusercontent.com/benc-uk/k6-reporter/main/dist/bundle.js';
 import http from 'k6/http';
 import { check, group, sleep } from 'k6';
 import { Trend, Rate } from 'k6/metrics';
-import { login, authHeaders, formatDuration } from '../lib/helpers.js';
-import { formatDataMetrics, needed_properties } from '../helpers/utils.js';
-import { endpoints } from '../config/environments.js';
+import { login, authHeaders, formatDuration } from '../lib/helpers';
+import { formatDataMetrics, needed_properties } from '../lib/utils';
+import { endpoints } from '../config/environments';
+import type { K6Options, SetupData, SummaryData, SummaryOutput, TabConfig } from '../types';
 
-/*
- * Tab Load Times Performance Test
- *
- * Baseline test for all main UI tabs.
- */
+declare const __ENV: Record<string, string | undefined>;
 
 // Custom metrics per tab
 const readyToSignDuration = new Trend('tab_ready_to_sign_duration');
@@ -23,7 +27,10 @@ const notificationsDuration = new Trend('tab_notifications_duration');
 
 const tabLoadSuccess = new Rate('tab_load_success');
 
-export const options = {
+/**
+ * k6 options configuration
+ */
+export const options: K6Options = {
   scenarios: {
     // Single user baseline
     baseline: {
@@ -49,7 +56,7 @@ const BASE_URL = __ENV.BASE_URL || 'http://localhost:3001';
 const USER_EMAIL = __ENV.USER_EMAIL || 'admin@test.com';
 const USER_PASSWORD = __ENV.USER_PASSWORD || '1234567890';
 
-const TABS = [
+const TABS: TabConfig[] = [
   {
     name: 'Ready to Sign',
     endpoint: endpoints['ready-to-sign'],
@@ -94,7 +101,10 @@ const TABS = [
   },
 ];
 
-export function setup() {
+/**
+ * Setup function - authenticates and returns token
+ */
+export function setup(): SetupData {
   const token = login(BASE_URL, USER_EMAIL, USER_PASSWORD);
   if (!token) {
     console.error('Failed to authenticate - check credentials');
@@ -104,7 +114,10 @@ export function setup() {
   return { token };
 }
 
-export default function (data) {
+/**
+ * Main test function - tests each tab
+ */
+export default function (data: SetupData): void {
   const { token } = data;
   if (!token) {
     console.error('No auth token - skipping iteration');
@@ -114,7 +127,7 @@ export default function (data) {
   const headers = authHeaders(token);
 
   // Test each tab
-  TABS.forEach(tab => {
+  TABS.forEach((tab) => {
     group(tab.name, () => {
       const res = http.get(`${BASE_URL}${tab.endpoint}`, {
         ...headers,
@@ -126,8 +139,8 @@ export default function (data) {
       tab.metric.add(res.timings.duration);
 
       check(res, {
-        [`${tab.name} status 200`]: r => r.status === 200,
-        [`${tab.name} response < 1s`]: r => r.timings.duration < 1000,
+        [`${tab.name} status 200`]: (r) => r.status === 200,
+        [`${tab.name} response < 1s`]: (r) => r.timings.duration < 1000,
       });
 
       if (!success) {
@@ -141,18 +154,10 @@ export default function (data) {
   sleep(1); // Delay between iterations
 }
 
-export function handleSummary(data) {
-  const summary = generateTextSummary(data);
-  formatDataMetrics(data, needed_properties);
-
-  return {
-    'k6/reports/tab-load-times-report.html': htmlReport(data),
-    'k6/reports/tab-load-times-summary.json': JSON.stringify(data, null, 2),
-    stdout: summary,
-  };
-}
-
-function generateTextSummary(data) {
+/**
+ * Generate text summary for console output
+ */
+function generateTextSummary(data: SummaryData): string {
   let output = '\n=== Tab Load Times Summary ===\n\n';
 
   const tabMetrics = [
@@ -168,7 +173,7 @@ function generateTextSummary(data) {
   output += '| Tab                | Avg      | P95      | Max      |\n';
   output += '|--------------------|----------|----------|----------|\n';
 
-  tabMetrics.forEach(tab => {
+  tabMetrics.forEach((tab) => {
     const metric = data.metrics[tab.key];
     if (metric && metric.values) {
       const v = metric.values;
@@ -178,8 +183,22 @@ function generateTextSummary(data) {
 
   const successRate = data.metrics.tab_load_success;
   if (successRate && successRate.values) {
-    output += `\nSuccess Rate: ${(successRate.values.rate * 100).toFixed(2)}%\n`;
+    output += `\nSuccess Rate: ${(successRate.values.rate! * 100).toFixed(2)}%\n`;
   }
 
   return output;
+}
+
+/**
+ * Generate summary report
+ */
+export function handleSummary(data: SummaryData): SummaryOutput {
+  const summary = generateTextSummary(data);
+  formatDataMetrics(data, needed_properties);
+
+  return {
+    'k6/reports/tab-load-times-report.html': htmlReport(data),
+    'k6/reports/tab-load-times-summary.json': JSON.stringify(data, null, 2),
+    stdout: summary,
+  };
 }

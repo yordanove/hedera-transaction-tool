@@ -74,6 +74,6 @@ test.describe('Drafts Page Performance', () => {
     console.log(`Drafts list render time: ${formatDuration(renderTime)}`);
 
     // Even with no data, the tab should load quickly
-    expect(renderTime).toBeLessThan(TARGET_LOAD_TIME_MS + 500);
+    expect(renderTime).toBeLessThan(TARGET_LOAD_TIME_MS);
   });
 });

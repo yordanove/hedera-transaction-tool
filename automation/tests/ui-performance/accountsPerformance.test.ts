@@ -72,6 +72,6 @@ test.describe('Accounts Page Performance', () => {
     const renderTime = Date.now() - startTime;
     console.log(`Accounts list render time: ${formatDuration(renderTime)}`);
 
-    expect(renderTime).toBeLessThan(TARGET_LOAD_TIME_MS + 500);
+    expect(renderTime).toBeLessThan(TARGET_LOAD_TIME_MS);
   });
 });

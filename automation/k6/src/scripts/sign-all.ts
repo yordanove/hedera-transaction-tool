@@ -1,9 +1,4 @@
-import http from 'k6/http';
-import { check, group } from 'k6';
-import { Trend, Counter, Rate } from 'k6/metrics';
-import { login, authHeaders, formatDuration } from '../lib/helpers.js';
-
-/*
+/**
  * Sign All Transactions Performance Test
  *
  * This test measures the API upload time for pre-signed transactions.
@@ -15,6 +10,22 @@ import { login, authHeaders, formatDuration } from '../lib/helpers.js';
  * 2. API_ONLY - Fetch transactions and measure GET/POST without real signatures
  */
 
+import http from 'k6/http';
+import { check, group } from 'k6';
+import { Trend, Counter, Rate } from 'k6/metrics';
+import { login, authHeaders, formatDuration } from '../lib/helpers';
+import type {
+  K6Options,
+  SetupData,
+  SummaryData,
+  SummaryOutput,
+  Transaction,
+  PaginatedResponse,
+} from '../types';
+
+declare const __ENV: Record<string, string | undefined>;
+declare function open(filePath: string): string;
+
 // Custom metrics
 const signAllDuration = new Trend('sign_all_duration');
 const uploadSignatureDuration = new Trend('upload_signature_duration');
@@ -25,7 +36,10 @@ const uploadSuccess = new Rate('upload_success_rate');
 const TARGET_TRANSACTION_COUNT = 200;
 const TARGET_DURATION_MS = 4000;
 
-export const options = {
+/**
+ * k6 options configuration
+ */
+export const options: K6Options = {
   scenarios: {
     // Single iteration to measure batch signing
     signAll: {
@@ -49,19 +63,36 @@ const USER_PASSWORD = __ENV.USER_PASSWORD || '1234567890';
 // Set via: k6 run -e SIGNATURES_FILE=./data/signatures.json sign-all.js
 const SIGNATURES_FILE = __ENV.SIGNATURES_FILE || '';
 
+// Pre-signed data types
+interface PreSignedTransaction {
+  signatures: unknown[];
+}
+
+interface PreSignedData {
+  count?: number;
+  signatureCount?: number;
+  signatures?: unknown[];
+  transactions?: PreSignedTransaction[];
+}
+
 // Load pre-signed signatures if file provided
-let preSignedData = null;
+let preSignedData: PreSignedData | null = null;
 if (SIGNATURES_FILE) {
   try {
-    preSignedData = JSON.parse(open(SIGNATURES_FILE));
-    console.log(`Loaded ${preSignedData.count || preSignedData.signatureCount} pre-signed transactions`);
-  } catch (e) {
+    preSignedData = JSON.parse(open(SIGNATURES_FILE)) as PreSignedData;
+    console.log(
+      `Loaded ${preSignedData.count || preSignedData.signatureCount} pre-signed transactions`,
+    );
+  } catch {
     console.warn(`Could not load signatures file: ${SIGNATURES_FILE}`);
     console.warn('Running in API_ONLY mode (no real signatures)');
   }
 }
 
-export function setup() {
+/**
+ * Setup function - authenticates and returns token
+ */
+export function setup(): SetupData {
   const token = login(BASE_URL, USER_EMAIL, USER_PASSWORD);
   if (!token) {
     console.error('Failed to authenticate - check credentials');
@@ -71,7 +102,10 @@ export function setup() {
   return { token };
 }
 
-export default function (data) {
+/**
+ * Main test function - signs all transactions
+ */
+export default function (data: SetupData): void {
   const { token } = data;
   if (!token) {
     console.error('No auth token - aborting test');
@@ -97,12 +131,15 @@ export default function (data) {
       return;
     }
 
-    let transactions;
+    let transactions: Transaction[];
     try {
-      const body = JSON.parse(listRes.body);
-      transactions = body.data || body;
+      const body = JSON.parse(listRes.body as string) as
+        | PaginatedResponse<Transaction>
+        | Transaction[];
+      transactions = Array.isArray(body) ? body : body.data;
     } catch (e) {
-      console.error(`Failed to parse response: ${e.message}`);
+      const error = e as Error;
+      console.error(`Failed to parse response: ${error.message}`);
       return;
     }
 
@@ -123,17 +160,18 @@ export default function (data) {
       const txId = tx.id || tx.transactionId;
 
       // Get signature payload
-      let signaturePayload;
-      if (preSignedData && preSignedData.signatures && preSignedData.signatures[i]) {
+      let signaturePayload: { id: number | string; signatureMap: unknown } | null = null;
+
+      if (preSignedData?.signatures?.[i]) {
         // Use pre-signed signature from file
         signaturePayload = {
-          id: txId,
+          id: txId!,
           signatureMap: preSignedData.signatures[i],
         };
-      } else if (preSignedData && preSignedData.transactions && preSignedData.transactions[i]) {
+      } else if (preSignedData?.transactions?.[i]) {
         // Alternative format from signMultipleTransactions
         signaturePayload = {
-          id: txId,
+          id: txId!,
           signatureMap: preSignedData.transactions[i].signatures[0],
         };
       } else {
@@ -195,16 +233,10 @@ export default function (data) {
   });
 }
 
-export function handleSummary(data) {
-  const summary = generateTextSummary(data);
-
-  return {
-    'k6/reports/sign-all-summary.json': JSON.stringify(data, null, 2),
-    stdout: summary,
-  };
-}
-
-function generateTextSummary(data) {
+/**
+ * Generate text summary for console output
+ */
+function generateTextSummary(data: SummaryData): string {
   let output = '\n=== Sign All Transactions Summary ===\n\n';
 
   const signAll = data.metrics.sign_all_duration;
@@ -230,8 +262,20 @@ function generateTextSummary(data) {
 
   const successRate = data.metrics.upload_success_rate;
   if (successRate && successRate.values) {
-    output += `Success Rate: ${(successRate.values.rate * 100).toFixed(2)}%\n`;
+    output += `Success Rate: ${(successRate.values.rate! * 100).toFixed(2)}%\n`;
   }
 
   return output;
+}
+
+/**
+ * Generate summary report
+ */
+export function handleSummary(data: SummaryData): SummaryOutput {
+  const summary = generateTextSummary(data);
+
+  return {
+    'k6/reports/sign-all-summary.json': JSON.stringify(data, null, 2),
+    stdout: summary,
+  };
 }
