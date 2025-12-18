@@ -240,7 +240,7 @@ function generateTextSummary(data: SummaryData): string {
   let output = '\n=== Sign All Transactions Summary ===\n\n';
 
   const signAll = data.metrics.sign_all_duration;
-  if (signAll && signAll.values) {
+  if (signAll?.values) {
     output += `Total Batch Duration:\n`;
     output += `  Value: ${formatDuration(signAll.values.avg)}\n`;
     output += `  Target: ${formatDuration(TARGET_DURATION_MS)}\n`;
@@ -248,7 +248,7 @@ function generateTextSummary(data: SummaryData): string {
   }
 
   const uploadDur = data.metrics.upload_signature_duration;
-  if (uploadDur && uploadDur.values) {
+  if (uploadDur?.values) {
     output += `Per-Transaction Duration:\n`;
     output += `  Avg: ${formatDuration(uploadDur.values.avg)}\n`;
     output += `  P95: ${formatDuration(uploadDur.values['p(95)'])}\n`;
@@ -256,12 +256,12 @@ function generateTextSummary(data: SummaryData): string {
   }
 
   const processed = data.metrics.transactions_processed;
-  if (processed && processed.values) {
+  if (processed?.values) {
     output += `Transactions Processed: ${processed.values.count}\n`;
   }
 
   const successRate = data.metrics.upload_success_rate;
-  if (successRate && successRate.values) {
+  if (successRate?.values) {
     output += `Success Rate: ${(successRate.values.rate! * 100).toFixed(2)}%\n`;
   }
 

@@ -34,10 +34,6 @@ export default async function (): Promise<void> {
   const startTime = Date.now();
   await page.goto('https://test.k6.io/browser.php');
 
-  // Example of locator usage (not used in this POC)
-  const _checkbox = page.locator('#checkbox1');
-  void _checkbox; // Acknowledge unused variable
-
   await page.waitForLoadState('networkidle');
 
   const timeToIdle = Date.now() - startTime;

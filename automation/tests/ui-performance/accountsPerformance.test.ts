@@ -8,7 +8,6 @@
 import { test, expect, ElectronApplication, Page } from '@playwright/test';
 import { setupApp, closeApp } from '../../utils/util.js';
 import { resetDbState } from '../../utils/databaseUtil.js';
-import { LoginPage } from '../../pages/LoginPage.js';
 import { RegistrationPage } from '../../pages/RegistrationPage.js';
 import {
   TARGET_LOAD_TIME_MS,
@@ -19,14 +18,12 @@ import {
 
 let app: ElectronApplication;
 let window: Page;
-let loginPage: LoginPage;
 let registrationPage: RegistrationPage;
 
 test.describe('Accounts Page Performance', () => {
   test.beforeAll(async () => {
     await resetDbState();
     ({ app, window } = await setupApp());
-    loginPage = new LoginPage(window);
     registrationPage = new RegistrationPage(window);
 
     // Register and login

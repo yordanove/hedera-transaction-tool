@@ -144,7 +144,8 @@ export default function (data: SetupData): void {
       });
 
       if (!success) {
-        console.warn(`${tab.name} failed: ${res.status} - ${res.body}`);
+        const body = typeof res.body === 'string' ? res.body : '';
+        console.warn(`${tab.name} failed: ${res.status} - ${body}`);
       }
     });
 
@@ -175,14 +176,14 @@ function generateTextSummary(data: SummaryData): string {
 
   tabMetrics.forEach((tab) => {
     const metric = data.metrics[tab.key];
-    if (metric && metric.values) {
+    if (metric?.values) {
       const v = metric.values;
       output += `| ${tab.name.padEnd(18)} | ${formatDuration(v.avg).padEnd(8)} | ${formatDuration(v['p(95)']).padEnd(8)} | ${formatDuration(v.max).padEnd(8)} |\n`;
     }
   });
 
   const successRate = data.metrics.tab_load_success;
-  if (successRate && successRate.values) {
+  if (successRate?.values) {
     output += `\nSuccess Rate: ${(successRate.values.rate! * 100).toFixed(2)}%\n`;
   }
 

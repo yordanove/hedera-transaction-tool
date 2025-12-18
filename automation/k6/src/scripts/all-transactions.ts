@@ -10,9 +10,9 @@ import { htmlReport } from 'https://raw.githubusercontent.com/benc-uk/k6-reporte
 import http from 'k6/http';
 import { check, sleep, group } from 'k6';
 import { login, authHeaders, formatDuration } from '../lib/helpers';
-import { formatDataMetrics, needed_properties } from '../lib/utils';
+import { formatDataMetrics, needed_properties, textSummary } from '../lib/utils';
 import { endpoints } from '../config/environments';
-import type { K6Options, SetupData, SummaryData, SummaryOutput, TextSummaryOptions } from '../types';
+import type { K6Options, SetupData, SummaryData, SummaryOutput } from '../types';
 
 declare const __ENV: Record<string, string | undefined>;
 
@@ -81,24 +81,6 @@ export default function (data: SetupData): void {
 }
 
 /**
- * Generate text summary for console output
- */
-function textSummary(data: SummaryData, _opts: TextSummaryOptions): string {
-  const metrics = data.metrics;
-  let output = '\n=== All Transactions Performance Summary ===\n\n';
-
-  if (metrics.http_req_duration) {
-    const dur = metrics.http_req_duration.values;
-    output += `HTTP Request Duration:\n`;
-    output += `  avg: ${formatDuration(dur.avg)}\n`;
-    output += `  p95: ${formatDuration(dur['p(95)'])}\n`;
-    output += `  max: ${formatDuration(dur.max)}\n`;
-  }
-
-  return output;
-}
-
-/**
  * Generate summary report
  */
 export function handleSummary(data: SummaryData): SummaryOutput {
@@ -107,6 +89,6 @@ export function handleSummary(data: SummaryData): SummaryOutput {
   return {
     'k6/reports/all-transactions-report.html': htmlReport(data),
     'k6/reports/all-transactions.json': JSON.stringify(data, null, 2),
-    stdout: textSummary(data, { indent: '  ', enableColors: true }),
+    stdout: textSummary(data, 'All Transactions'),
   };
 }

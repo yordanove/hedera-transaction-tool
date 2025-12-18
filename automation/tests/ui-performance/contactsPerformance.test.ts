@@ -9,7 +9,6 @@ import { test, expect, ElectronApplication, Page } from '@playwright/test';
 import * as dotenv from 'dotenv';
 import { setupApp, closeApp } from '../../utils/util.js';
 import { resetDbState, resetPostgresDbState } from '../../utils/databaseUtil.js';
-import { LoginPage } from '../../pages/LoginPage.js';
 import { RegistrationPage } from '../../pages/RegistrationPage.js';
 import { OrganizationPage } from '../../pages/OrganizationPage.js';
 import { ContactListPage } from '../../pages/ContactListPage.js';
@@ -25,7 +24,6 @@ dotenv.config();
 
 let app: ElectronApplication;
 let window: Page;
-let loginPage: LoginPage;
 let registrationPage: RegistrationPage;
 let organizationPage: OrganizationPage;
 let contactListPage: ContactListPage;
@@ -35,7 +33,6 @@ test.describe('Contacts Page Performance', () => {
     await resetDbState();
     await resetPostgresDbState();
     ({ app, window } = await setupApp());
-    loginPage = new LoginPage(window);
     registrationPage = new RegistrationPage(window);
     organizationPage = new OrganizationPage(window);
     contactListPage = new ContactListPage(window);

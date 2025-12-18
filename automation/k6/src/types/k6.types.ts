@@ -83,11 +83,3 @@ export interface MetricPropertyMap {
 export interface SummaryOutput {
   [outputPath: string]: string | undefined;
 }
-
-/**
- * Text summary options
- */
-export interface TextSummaryOptions {
-  indent?: string;
-  enableColors?: boolean;
-}
