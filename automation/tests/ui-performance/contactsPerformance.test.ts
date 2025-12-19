@@ -2,7 +2,7 @@
  * Performance Test: Contacts Page
  *
  * Requirement: 100+ contacts load in ≤ 1s
- * Data source: Local SQLite (Contact model)
+ * Data source: Backend PostgreSQL (org users appear as contacts)
  */
 
 import { test, expect, ElectronApplication, Page } from '@playwright/test';
@@ -14,13 +14,16 @@ import { OrganizationPage } from '../../pages/OrganizationPage.js';
 import { ContactListPage } from '../../pages/ContactListPage.js';
 import {
   TARGET_LOAD_TIME_MS,
-  measurePageLoadTime,
+  collectPerformanceSamples,
+  measureListLoadTime,
   formatDuration,
-  assertLoadTime,
 } from './performanceUtils.js';
 
 // Load environment variables from .env file
 dotenv.config();
+
+const MIN_CONTACTS = 100;
+const CONTACT_ROW_SELECTOR = '.table tbody tr';
 
 let app: ElectronApplication;
 let window: Page;
@@ -37,9 +40,11 @@ test.describe('Contacts Page Performance', () => {
     organizationPage = new OrganizationPage(window);
     contactListPage = new ContactListPage(window);
 
-    // Create test user in backend
-    await organizationPage.createUsers(1);
+    // Create 100+ test users in backend (they will appear as contacts)
+    console.log(`Creating ${MIN_CONTACTS} users in backend...`);
+    await organizationPage.createUsers(MIN_CONTACTS);
     const testUser = organizationPage.getUser(0);
+    console.log(`Created ${MIN_CONTACTS} users`);
 
     // Register locally
     const password = 'TestPassword123';
@@ -65,38 +70,31 @@ test.describe('Contacts Page Performance', () => {
     await resetPostgresDbState();
   });
 
-  test('Contacts page load time should be under 1 second', async () => {
-    // Measure navigation to Contacts page
-    const loadTime = await measurePageLoadTime(window, async () => {
-      await organizationPage.clickOnContactListButton();
-    });
+  test('Contacts page should load 100 items in under 1 second (p95)', async () => {
+    // Collect multiple samples for p95
+    const samples = await collectPerformanceSamples(async () => {
+      // Navigate away then back to Contacts
+      await window.click('[data-testid="button-menu-transactions"]');
+      await window.waitForLoadState('networkidle');
 
-    const passed = assertLoadTime(loadTime, TARGET_LOAD_TIME_MS, 'Contacts Page');
-    expect(passed).toBe(true);
-  });
+      const { loadTime, rowCount } = await measureListLoadTime(
+        window,
+        async () => {
+          await organizationPage.clickOnContactListButton();
+        },
+        CONTACT_ROW_SELECTOR,
+        MIN_CONTACTS,
+      );
 
-  test('Contacts list renders within threshold', async () => {
-    // Navigate to Contacts
-    await organizationPage.clickOnContactListButton();
+      // Verify data volume on each sample
+      expect(rowCount).toBeGreaterThanOrEqual(MIN_CONTACTS);
 
-    // Measure time until list is visible
-    const startTime = Date.now();
-    await window.waitForLoadState('networkidle');
+      return loadTime;
+    }, 5);
 
-    // Wait for either contacts list or empty state
-    await Promise.race([
-      window.waitForSelector('.table', { state: 'visible', timeout: TARGET_LOAD_TIME_MS + 1000 }),
-      window.waitForSelector('[data-testid="contacts-empty"]', {
-        state: 'visible',
-        timeout: TARGET_LOAD_TIME_MS + 1000,
-      }),
-    ]).catch(() => {
-      // Page loaded but no specific element found
-    });
+    console.log(`Contacts p95: ${formatDuration(samples.p95)}, avg: ${formatDuration(samples.avg)}`);
+    console.log(`  Samples: ${samples.values.map((v) => formatDuration(v)).join(', ')}`);
 
-    const renderTime = Date.now() - startTime;
-    console.log(`Contacts list render time: ${formatDuration(renderTime)}`);
-
-    expect(renderTime).toBeLessThan(TARGET_LOAD_TIME_MS);
+    expect(samples.p95).toBeLessThan(TARGET_LOAD_TIME_MS);
   });
 });

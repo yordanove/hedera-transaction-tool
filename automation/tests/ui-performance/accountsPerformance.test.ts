@@ -1,24 +1,34 @@
 /**
  * Performance Test: Accounts Page
  *
- * Requirement: 100+ accounts load in ≤ 1s
+ * Requirement: 100 accounts in DB, page load (50 visible) in ≤ 1s
  * Data source: Local SQLite (HederaAccount model)
+ *
+ * Note: UI paginates at max 50 items per page.
  */
 
 import { test, expect, ElectronApplication, Page } from '@playwright/test';
 import { setupApp, closeApp } from '../../utils/util.js';
 import { resetDbState } from '../../utils/databaseUtil.js';
 import { RegistrationPage } from '../../pages/RegistrationPage.js';
+import { seedLocalPerfData } from './seed-local-perf-data.js';
 import {
   TARGET_LOAD_TIME_MS,
-  measurePageLoadTime,
+  collectPerformanceSamples,
+  waitForRowCount,
+  setPageSize,
   formatDuration,
-  assertLoadTime,
 } from './performanceUtils.js';
+
+const DB_ITEM_COUNT = 100;
+const PAGE_SIZE = 50;
+const ACCOUNT_ROW_SELECTOR = '.table tbody tr';
 
 let app: ElectronApplication;
 let window: Page;
 let registrationPage: RegistrationPage;
+let testEmail: string;
+let seededCount: number;
 
 test.describe('Accounts Page Performance', () => {
   test.beforeAll(async () => {
@@ -27,9 +37,14 @@ test.describe('Accounts Page Performance', () => {
     registrationPage = new RegistrationPage(window);
 
     // Register and login
-    const email = `perf-accounts-${Date.now()}@test.com`;
+    testEmail = `perf-accounts-${Date.now()}@test.com`;
     const password = 'TestPassword123';
-    await registrationPage.completeRegistration(email, password);
+    await registrationPage.completeRegistration(testEmail, password);
+
+    // Seed test data
+    const result = await seedLocalPerfData(testEmail);
+    seededCount = result.accounts;
+    console.log(`Seeded ${seededCount} accounts for performance test`);
   });
 
   test.afterAll(async () => {
@@ -37,38 +52,29 @@ test.describe('Accounts Page Performance', () => {
     await resetDbState();
   });
 
-  test('Accounts page load time should be under 1 second', async () => {
-    // Measure navigation to Accounts page
-    const loadTime = await measurePageLoadTime(window, async () => {
-      await window.click('[data-testid="button-menu-accounts"]');
-    });
-
-    const passed = assertLoadTime(loadTime, TARGET_LOAD_TIME_MS, 'Accounts Page');
-    expect(passed).toBe(true);
+  test('Verify 100 accounts seeded to DB', async () => {
+    expect(seededCount).toBeGreaterThanOrEqual(DB_ITEM_COUNT);
   });
 
-  test('Accounts list renders within threshold', async () => {
-    // Navigate to Accounts
-    await window.click('[data-testid="button-menu-accounts"]');
+  test('Accounts page should load in under 1 second (p95)', async () => {
+    // Collect multiple samples for p95
+    const samples = await collectPerformanceSamples(async () => {
+      // Navigate away first
+      await window.click('[data-testid="button-menu-transactions"]');
+      await window.waitForLoadState('networkidle');
 
-    // Measure time until list is visible
-    const startTime = Date.now();
-    await window.waitForLoadState('networkidle');
+      // Measure page load time
+      const startTime = Date.now();
+      await window.click('[data-testid="button-menu-accounts"]');
+      await window.waitForLoadState('networkidle');
+      const loadTime = Date.now() - startTime;
 
-    // Wait for either accounts list or empty state
-    await Promise.race([
-      window.waitForSelector('.table', { state: 'visible', timeout: TARGET_LOAD_TIME_MS + 1000 }),
-      window.waitForSelector('[data-testid="accounts-empty"]', {
-        state: 'visible',
-        timeout: TARGET_LOAD_TIME_MS + 1000,
-      }),
-    ]).catch(() => {
-      // Page loaded but no specific element found
-    });
+      return loadTime;
+    }, 5);
 
-    const renderTime = Date.now() - startTime;
-    console.log(`Accounts list render time: ${formatDuration(renderTime)}`);
+    console.log(`Accounts p95: ${formatDuration(samples.p95)}, avg: ${formatDuration(samples.avg)}`);
+    console.log(`  Samples: ${samples.values.map((v) => formatDuration(v)).join(', ')}`);
 
-    expect(renderTime).toBeLessThan(TARGET_LOAD_TIME_MS);
+    expect(samples.p95).toBeLessThan(TARGET_LOAD_TIME_MS);
   });
 });
