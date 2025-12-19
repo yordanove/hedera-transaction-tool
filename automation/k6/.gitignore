@@ -9,3 +9,6 @@ dist/
 # Environment files with credentials
 .env
 *.local.json
+
+# Generated test data (from seed-perf-data.ts)
+data/

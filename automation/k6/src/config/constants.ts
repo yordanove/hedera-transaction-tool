@@ -62,3 +62,12 @@ export const PAGINATION = {
   DEFAULT_SIZE: 100,
   MAX_SIZE: 100, // Backend limit - cannot exceed
 };
+
+/**
+ * Default test credentials for k6 performance tests
+ * Used by seed scripts and npm run commands
+ */
+export const TEST_CREDENTIALS = {
+  EMAIL: 'k6perf@test.com',
+  PASSWORD: 'Password123',
+} as const;

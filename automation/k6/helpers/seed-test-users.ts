@@ -26,16 +26,13 @@ interface UserRow {
   id: number;
 }
 
-function getTestUser(): TestUser {
-  const email = process.env.TEST_USER_EMAIL;
-  const password = process.env.TEST_USER_PASSWORD;
+// Default test credentials (can be overridden via environment variables)
+const DEFAULT_EMAIL = 'k6perf@test.com';
+const DEFAULT_PASSWORD = 'Password123';
 
-  if (!email || !password) {
-    console.error('Error: TEST_USER_EMAIL and TEST_USER_PASSWORD environment variables are required');
-    console.log('\nUsage:');
-    console.log('  TEST_USER_EMAIL=admin@test.com TEST_USER_PASSWORD=yourpassword npx tsx k6/helpers/seed-test-users.ts');
-    process.exit(1);
-  }
+function getTestUser(): TestUser {
+  const email = process.env.TEST_USER_EMAIL || DEFAULT_EMAIL;
+  const password = process.env.TEST_USER_PASSWORD || DEFAULT_PASSWORD;
 
   return {
     email,
