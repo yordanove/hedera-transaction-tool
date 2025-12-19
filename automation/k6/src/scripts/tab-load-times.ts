@@ -296,14 +296,14 @@ function generateTextSummary(data: SummaryData): string {
     { name: 'Notifications', key: 'tab_notifications_duration' },
   ];
 
-  output += '| Tab                | Avg      | P95      | Max      |\n';
-  output += '|--------------------|----------|----------|----------|\n';
+  output += '| Tab               | Avg      | P95      | Max      |\n';
+  output += '|-------------------|----------|----------|----------|\n';
 
   tabMetrics.forEach((tab) => {
     const metric = data.metrics[tab.key];
     if (metric?.values) {
       const v = metric.values;
-      output += `| ${tab.name.padEnd(18)} | ${formatDuration(v.avg).padEnd(8)} | ${formatDuration(v['p(95)']).padEnd(8)} | ${formatDuration(v.max).padEnd(8)} |\n`;
+      output += `| ${tab.name.padEnd(17)} | ${formatDuration(v.avg).padEnd(8)} | ${formatDuration(v['p(95)']).padEnd(8)} | ${formatDuration(v.max).padEnd(8)} |\n`;
     }
   });
 

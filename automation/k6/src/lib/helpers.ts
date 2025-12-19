@@ -81,7 +81,7 @@ export function authHeaders(token: string): AuthHeaders {
  * Format duration for logging
  */
 export function formatDuration(ms: number): string {
-  if (ms < THRESHOLDS.PAGE_LOAD_MS) return `${ms}ms`;
+  if (ms < THRESHOLDS.PAGE_LOAD_MS) return `${ms.toFixed(2)}ms`;
   return `${(ms / THRESHOLDS.PAGE_LOAD_MS).toFixed(2)}s`;
 }
 
