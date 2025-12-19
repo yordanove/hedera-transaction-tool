@@ -2,20 +2,23 @@
  * Ready to Approve Load Test
  *
  * Requirements:
- * - Page load < 1 second
+ * - Page load < 1 second (100 items)
  * - 100+ concurrent users
  */
 
 import http from 'k6/http';
 import { check, sleep, group } from 'k6';
+import { Rate } from 'k6/metrics';
 import { authHeaders, formatDuration } from '../lib/helpers';
 import { multiUserSetup, getTokenForVU } from '../lib/setup';
 import { formatDataMetrics, needed_properties, textSummary } from '../lib/utils';
 import { getBaseUrlWithFallback } from '../config/credentials';
-import { endpoints } from '../config/environments';
-import { THRESHOLDS, DELAYS, HTTP_STATUS } from '../config/constants';
+import { DATA_VOLUMES, THRESHOLDS, DELAYS, HTTP_STATUS, PAGINATION } from '../config/constants';
 import { STANDARD_LOAD_STAGES, TAB_LOAD_THRESHOLDS } from '../config/load-profiles';
 import type { K6Options, MultiUserSetupData, SummaryData, SummaryOutput } from '../types';
+
+// Custom metrics
+const dataVolumeOk = new Rate('ready_to_approve_data_volume_ok');
 
 declare const __ENV: Record<string, string | undefined>;
 const DEBUG = __ENV.DEBUG === 'true';
@@ -34,6 +37,7 @@ export const options: K6Options = {
   },
   thresholds: {
     'http_req_duration{name:ready-to-approve}': [`${THRESHOLDS.P95_PERCENTILE}<${THRESHOLDS.PAGE_LOAD_MS}`],
+    ready_to_approve_data_volume_ok: ['rate==1'], // Must fetch target volume
     ...TAB_LOAD_THRESHOLDS,
   },
 };
@@ -49,25 +53,49 @@ export function setup(): MultiUserSetupData {
 
 /**
  * Main test function
+ * Fetches 100 items (fits in single page since MAX_SIZE=100)
  */
 export default function (data: MultiUserSetupData): void {
   const token = getTokenForVU(data);
   if (!token) return;
 
   const headers = authHeaders(token);
+  const targetCount = DATA_VOLUMES.READY_FOR_REVIEW; // 100
 
   group('Ready to Approve Page', () => {
-    const res = http.get(`${BASE_URL}${endpoints['ready-to-approve']}`, {
-      ...headers,
-      tags: { name: 'ready-to-approve' },
-    });
+    const res = http.get(
+      `${BASE_URL}/transactions/approve?page=1&size=${PAGINATION.MAX_SIZE}`,
+      { ...headers, tags: { name: 'ready-to-approve' } },
+    );
 
     check(res, {
       'ready-to-approve status 200': (r) => r.status === HTTP_STATUS.OK,
       'ready-to-approve response < 1s': (r) => r.timings.duration < THRESHOLDS.PAGE_LOAD_MS,
     });
 
-    if (DEBUG) console.log(`Ready to Approve load time: ${formatDuration(res.timings.duration)}`);
+    if (res.status !== HTTP_STATUS.OK) {
+      dataVolumeOk.add(false);
+      return;
+    }
+
+    // Parse response and check volume
+    try {
+      const body = JSON.parse(res.body as string) as { items: unknown[] };
+      const itemCount = body.items?.length ?? 0;
+
+      const volumeMet = itemCount >= targetCount;
+      dataVolumeOk.add(volumeMet);
+
+      if (!volumeMet) {
+        console.warn(`Volume check failed: got ${itemCount}, expected ${targetCount}`);
+      }
+
+      if (DEBUG) {
+        console.log(`Ready to Approve: ${itemCount} items in ${formatDuration(res.timings.duration)}`);
+      }
+    } catch {
+      dataVolumeOk.add(false);
+    }
   });
 
   sleep(DELAYS.BETWEEN_ITERATIONS);
