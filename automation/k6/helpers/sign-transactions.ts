@@ -15,10 +15,15 @@ import fs from 'fs';
 import path from 'path';
 import { Transaction, PrivateKey } from '@hashgraph/sdk';
 
-/** Signature map in V1 JSON format for API */
-interface V1SignatureMap {
+/**
+ * Signature map format expected by backend
+ * Structure: nodeAccountId -> transactionId -> publicKey -> signature (hex)
+ */
+interface SignatureMap {
   [nodeAccountId: string]: {
-    [publicKey: string]: string;
+    [transactionId: string]: {
+      [publicKey: string]: string;
+    };
   };
 }
 
@@ -32,7 +37,7 @@ interface TransactionInput {
 /** Output from signing multiple transactions */
 interface SignedTransactionOutput {
   transactionId: string;
-  signatures: V1SignatureMap[];
+  signatureMap: SignatureMap; // Single merged SignatureMap (all keys combined)
 }
 
 /** Output file format for k6 */
@@ -40,25 +45,33 @@ interface K6SignaturesOutput {
   generatedAt: string;
   count: number;
   transactions: SignedTransactionOutput[];
+  /** Signatures keyed by transaction ID - single SignatureMap per tx (not array!) */
+  signaturesByTxId: Record<string, SignatureMap>;
 }
 
 /**
- * Convert SDK signature map to V1 JSON format
- * Matches the format expected by POST /transactions/:id/signers
+ * Convert SDK signature map to backend format
+ * Structure: nodeAccountId -> transactionId -> publicKey -> signature (hex with 0x prefix)
  */
-function signatureMapToV1Json(signatureMap: Map<string, Map<string, Map<string, Uint8Array>>>): V1SignatureMap {
-  const result: V1SignatureMap = {};
-  for (const nodeAccountId of signatureMap.keys()) {
+function signatureMapToBackendFormat(
+  signatureMap: Map<string, Map<string, Map<string, Uint8Array>>>,
+): SignatureMap {
+  const result: SignatureMap = {};
+
+  for (const [nodeAccountId, txMap] of signatureMap.entries()) {
     result[nodeAccountId] = {};
-    const txMap = signatureMap.get(nodeAccountId)!;
-    for (const transactionId of txMap.keys()) {
-      const pkMap = txMap.get(transactionId)!;
-      for (const publicKey of pkMap.keys()) {
-        const signature = pkMap.get(publicKey)!;
-        result[nodeAccountId][publicKey] = Buffer.from(signature).toString('base64');
+
+    for (const [transactionId, pkMap] of txMap.entries()) {
+      result[nodeAccountId][transactionId] = {};
+
+      for (const [publicKey, signature] of pkMap.entries()) {
+        // Use hex encoding with 0x prefix (as expected by backend)
+        result[nodeAccountId][transactionId][publicKey] =
+          '0x' + Buffer.from(signature).toString('hex');
       }
     }
   }
+
   return result;
 }
 
@@ -66,42 +79,68 @@ function signatureMapToV1Json(signatureMap: Map<string, Map<string, Map<string, 
  * Sign a transaction with a single private key
  * @param txBytes - Transaction bytes
  * @param privateKeyString - ED25519 private key string
- * @returns Signature in V1 JSON format
+ * @returns Signature in backend format
  */
-export function signTransaction(txBytes: Buffer, privateKeyString: string): V1SignatureMap {
+export function signTransaction(txBytes: Buffer, privateKeyString: string): SignatureMap {
   const tx = Transaction.fromBytes(txBytes);
   const pk = PrivateKey.fromStringED25519(privateKeyString);
   const signatureMap = pk.signTransaction(tx);
-  return signatureMapToV1Json(signatureMap as unknown as Map<string, Map<string, Map<string, Uint8Array>>>);
+  return signatureMapToBackendFormat(
+    signatureMap as unknown as Map<string, Map<string, Map<string, Uint8Array>>>,
+  );
+}
+
+/**
+ * Merge a SignatureMap into an existing one
+ * Combines signatures from multiple keys into a single nested structure
+ */
+function mergeSignatureMaps(target: SignatureMap, source: SignatureMap): void {
+  for (const [nodeId, txMap] of Object.entries(source)) {
+    if (!target[nodeId]) target[nodeId] = {};
+    for (const [txId, pkMap] of Object.entries(txMap)) {
+      if (!target[nodeId][txId]) target[nodeId][txId] = {};
+      Object.assign(target[nodeId][txId], pkMap);
+    }
+  }
 }
 
 /**
  * Sign a transaction with multiple private keys
  * @param txBytes - Transaction bytes
  * @param privateKeys - Array of ED25519 private key strings
- * @returns Array of signatures in V1 JSON format
+ * @returns Single merged SignatureMap with all keys combined
  */
-export function signTransactionWithMultipleKeys(txBytes: Buffer, privateKeys: string[]): V1SignatureMap[] {
+export function signTransactionWithMultipleKeys(
+  txBytes: Buffer,
+  privateKeys: string[],
+): SignatureMap {
   const tx = Transaction.fromBytes(txBytes);
-  return privateKeys.map(keyString => {
+  const merged: SignatureMap = {};
+
+  for (const keyString of privateKeys) {
     const pk = PrivateKey.fromStringED25519(keyString);
     const signatureMap = pk.signTransaction(tx);
-    return signatureMapToV1Json(signatureMap as unknown as Map<string, Map<string, Map<string, Uint8Array>>>);
-  });
+    const formatted = signatureMapToBackendFormat(
+      signatureMap as unknown as Map<string, Map<string, Map<string, Uint8Array>>>,
+    );
+    mergeSignatureMaps(merged, formatted);
+  }
+
+  return merged;
 }
 
 /**
  * Sign multiple transactions from files
  * @param transactions - Array of { txPath, privateKeys, transactionId }
- * @returns Array of { transactionId, signatures }
+ * @returns Array of { transactionId, signatureMap }
  */
 export function signMultipleTransactions(transactions: TransactionInput[]): SignedTransactionOutput[] {
   return transactions.map(({ txPath, privateKeys, transactionId }) => {
     const txBytes = fs.readFileSync(txPath);
-    const signatures = signTransactionWithMultipleKeys(txBytes, privateKeys);
+    const signatureMap = signTransactionWithMultipleKeys(txBytes, privateKeys);
     return {
       transactionId,
-      signatures,
+      signatureMap,
     };
   });
 }
@@ -113,10 +152,17 @@ export function signMultipleTransactions(transactions: TransactionInput[]): Sign
  * @param signedTransactions - Output from signMultipleTransactions
  */
 export function writeSignaturesForK6(outputPath: string, signedTransactions: SignedTransactionOutput[]): void {
+  // Build signaturesByTxId keyed by transaction ID - single SignatureMap per tx
+  const signaturesByTxId: Record<string, SignatureMap> = {};
+  for (const tx of signedTransactions) {
+    signaturesByTxId[tx.transactionId] = tx.signatureMap;
+  }
+
   const output: K6SignaturesOutput = {
     generatedAt: new Date().toISOString(),
     count: signedTransactions.length,
     transactions: signedTransactions,
+    signaturesByTxId,
   };
   fs.writeFileSync(outputPath, JSON.stringify(output, null, 2));
   console.log(`Wrote ${signedTransactions.length} transaction signatures to ${outputPath}`);
@@ -142,17 +188,24 @@ if (isMainModule) {
 
   try {
     const txBytes = fs.readFileSync(txPath);
-    const signatures = signTransactionWithMultipleKeys(txBytes, privateKeys);
+    const signatureMap = signTransactionWithMultipleKeys(txBytes, privateKeys);
+
+    // For CLI usage, we don't have transaction IDs, so we use filename as key
+    const txId = path.basename(txPath, path.extname(txPath));
+    const signaturesByTxId: Record<string, SignatureMap> = {
+      [txId]: signatureMap,
+    };
 
     const output = {
       generatedAt: new Date().toISOString(),
       transactionFile: path.basename(txPath),
-      signatureCount: signatures.length,
-      signatures,
+      keyCount: privateKeys.length,
+      signatureMap,
+      signaturesByTxId,
     };
 
     fs.writeFileSync(outputPath, JSON.stringify(output, null, 2));
-    console.log(`Successfully signed transaction with ${signatures.length} key(s)`);
+    console.log(`Successfully signed transaction with ${privateKeys.length} key(s)`);
     console.log(`Output written to: ${outputPath}`);
   } catch (error) {
     const err = error as Error;

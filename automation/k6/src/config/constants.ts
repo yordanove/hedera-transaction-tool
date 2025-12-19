@@ -16,16 +16,17 @@ export const THRESHOLDS = {
 /**
  * Data volume requirements per page
  * Based on performance acceptance criteria
+ * Note: Backend max page size is 100, so larger values require pagination
  */
 export const DATA_VOLUMES = {
-  SIGN_ALL_TRANSACTIONS: 200,
-  READY_TO_SIGN: 200,
+  SIGN_ALL_TRANSACTIONS: 200, // Requires 2 pages
+  READY_TO_SIGN: 200, // Requires 2 pages
   DRAFTS: 100,
   READY_FOR_REVIEW: 100,
   CONTACTS: 100,
   ACCOUNTS: 100,
   FILES: 100,
-  HISTORY: 500,
+  HISTORY: 500, // Requires 5 pages
 };
 
 /**
@@ -33,7 +34,6 @@ export const DATA_VOLUMES = {
  */
 export const LOAD_TEST = {
   CONCURRENT_USERS: 100,
-  MAX_ADDITIONAL_USERS: 10,
 };
 
 /**
@@ -55,9 +55,10 @@ export const HTTP_STATUS = {
 
 /**
  * Pagination defaults
+ * Note: Backend enforces MAX_SIZE limit
  */
 export const PAGINATION = {
   DEFAULT_PAGE: 1,
   DEFAULT_SIZE: 100,
-  HISTORY_SIZE: 500,
+  MAX_SIZE: 100, // Backend limit - cannot exceed
 };

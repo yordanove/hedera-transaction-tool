@@ -6,17 +6,19 @@
  * - 100+ concurrent users
  */
 
-import { htmlReport } from 'https://raw.githubusercontent.com/benc-uk/k6-reporter/main/dist/bundle.js';
 import http from 'k6/http';
 import { check, sleep, group } from 'k6';
 import { authHeaders, formatDuration } from '../lib/helpers';
-import { standardSetup } from '../lib/setup';
+import { multiUserSetup, getTokenForVU } from '../lib/setup';
 import { formatDataMetrics, needed_properties, textSummary } from '../lib/utils';
 import { getBaseUrlWithFallback } from '../config/credentials';
 import { endpoints } from '../config/environments';
 import { THRESHOLDS, DELAYS, HTTP_STATUS } from '../config/constants';
 import { STANDARD_LOAD_STAGES, TAB_LOAD_THRESHOLDS } from '../config/load-profiles';
-import type { K6Options, SetupData, SummaryData, SummaryOutput } from '../types';
+import type { K6Options, MultiUserSetupData, SummaryData, SummaryOutput } from '../types';
+
+declare const __ENV: Record<string, string | undefined>;
+const DEBUG = __ENV.DEBUG === 'true';
 
 /**
  * k6 options configuration
@@ -39,17 +41,17 @@ export const options: K6Options = {
 const BASE_URL = getBaseUrlWithFallback();
 
 /**
- * Setup function - authenticates and returns token
+ * Setup function - authenticates all configured test users
  */
-export function setup(): SetupData {
-  return standardSetup(BASE_URL);
+export function setup(): MultiUserSetupData {
+  return multiUserSetup(BASE_URL);
 }
 
 /**
  * Main test function
  */
-export default function (data: SetupData): void {
-  const { token } = data;
+export default function (data: MultiUserSetupData): void {
+  const token = getTokenForVU(data);
   if (!token) return;
 
   const headers = authHeaders(token);
@@ -65,7 +67,7 @@ export default function (data: SetupData): void {
       'all-transactions response < 1s': (r) => r.timings.duration < THRESHOLDS.PAGE_LOAD_MS,
     });
 
-    console.log(`All Transactions load time: ${formatDuration(res.timings.duration)}`);
+    if (DEBUG) console.log(`All Transactions load time: ${formatDuration(res.timings.duration)}`);
   });
 
   sleep(DELAYS.BETWEEN_ITERATIONS);
@@ -78,7 +80,6 @@ export function handleSummary(data: SummaryData): SummaryOutput {
   formatDataMetrics(data, needed_properties);
 
   return {
-    'k6/reports/all-transactions-report.html': htmlReport(data),
     'k6/reports/all-transactions.json': JSON.stringify(data, null, 2),
     stdout: textSummary(data, 'All Transactions'),
   };

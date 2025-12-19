@@ -5,7 +5,6 @@
  * Tests will fail if required credentials are not provided.
  */
 
-import { LOAD_TEST } from './constants';
 
 // k6 environment variables
 declare const __ENV: Record<string, string | undefined>;
@@ -48,11 +47,12 @@ export function getTestUsers(): TestCredentials[] {
     });
   }
 
-  // Additional users (USER_EMAIL_1, USER_EMAIL_2, etc.)
-  for (let i = 1; i <= LOAD_TEST.MAX_ADDITIONAL_USERS; i++) {
+  // Additional users (USER_EMAIL_1, USER_EMAIL_2, etc.) - no limit
+  for (let i = 1; ; i++) {
     const email = __ENV[`USER_EMAIL_${i}`];
+    if (!email) break; // Stop when no more users configured
     const password = __ENV[`USER_PASSWORD_${i}`] || __ENV.USER_PASSWORD;
-    if (email && password) {
+    if (password) {
       users.push({ email, password });
     }
   }

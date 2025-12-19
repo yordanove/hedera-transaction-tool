@@ -29,14 +29,16 @@ export const ENVIRONMENTS: EnvironmentMap = {
 
 /**
  * Build endpoint URL with pagination parameters
+ * Note: pageSize is capped at backend MAX_SIZE (100)
  */
 function buildEndpoint(
   path: string,
   pageSize: number = PAGINATION.DEFAULT_SIZE,
   filter?: string,
 ): string {
-  let url = `${path}?page=${PAGINATION.DEFAULT_PAGE}&size=${pageSize}`;
-  if (filter) url += `&filter=${filter}`;
+  const size = Math.min(pageSize, PAGINATION.MAX_SIZE);
+  let url = `${path}?page=${PAGINATION.DEFAULT_PAGE}&size=${size}`;
+  if (filter) url += `&filter=${encodeURIComponent(filter)}`;
   return url;
 }
 

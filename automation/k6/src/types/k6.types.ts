@@ -5,10 +5,18 @@
  */
 
 /**
- * Setup data passed to default function
+ * Setup data passed to default function (single user)
  */
 export interface SetupData {
   token: string | null;
+}
+
+/**
+ * Multi-user setup data for load tests
+ * Contains array of authenticated users for distribution across VUs
+ */
+export interface MultiUserSetupData {
+  users: Array<{ email: string; token: string }>;
 }
 
 /**

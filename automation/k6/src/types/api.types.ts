@@ -52,16 +52,23 @@ export type TransactionStatus =
   | 'CANCELED';
 
 /**
+ * Transaction to sign DTO from /transactions/sign endpoint
+ * Wraps Transaction with keysToSign metadata
+ */
+export interface TransactionToSignDto {
+  transaction: Transaction;
+  keysToSign: number[];
+}
+
+/**
  * Paginated API response wrapper
+ * Matches backend PaginatedResourceDto
  */
 export interface PaginatedResponse<T> {
-  data: T[];
-  meta: {
-    page: number;
-    size: number;
-    total: number;
-    totalPages: number;
-  };
+  items: T[];
+  totalItems: number;
+  page: number;
+  size: number;
 }
 
 /**
@@ -75,18 +82,32 @@ export interface AuthHeaders {
 }
 
 /**
+ * Backend signature map structure
+ * nodeAccountId -> transactionId -> publicKey -> signature (hex with 0x prefix)
+ */
+export interface SignatureMap {
+  [nodeAccountId: string]: {
+    [transactionId: string]: {
+      [publicKey: string]: string;
+    };
+  };
+}
+
+/**
  * Pre-signed transaction from signature helper
  */
 export interface PreSignedTransaction {
-  signatures: unknown[];
+  signatureMap: SignatureMap;
 }
 
 /**
  * Pre-signed data loaded from signatures file
+ * signaturesByTxId is keyed by Hedera transactionId string (not numeric DB id)
  */
 export interface PreSignedData {
   count?: number;
   signatureCount?: number;
-  signatures?: unknown[];
+  signatures?: SignatureMap[]; // Legacy array format (index-based)
+  signaturesByTxId?: Record<string, SignatureMap>; // Keyed by transactionId string
   transactions?: PreSignedTransaction[];
 }

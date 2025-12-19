@@ -2,23 +2,34 @@
  * Ready to Sign Performance Test
  *
  * Requirements:
- * - Sign all < 4 seconds with 100 transactions
- * - Ready to Sign page load < 1 second
+ * - Ready to Sign page load < 1 second (200 items)
  * - 100+ concurrent users
- * - Complex nested threshold keys
  */
 
-import { htmlReport } from 'https://raw.githubusercontent.com/benc-uk/k6-reporter/main/dist/bundle.js';
 import http from 'k6/http';
 import { check, sleep, group } from 'k6';
+import { Trend, Rate } from 'k6/metrics';
 import { authHeaders, formatDuration } from '../lib/helpers';
-import { standardSetup } from '../lib/setup';
+import { multiUserSetup, getTokenForVU } from '../lib/setup';
 import { formatDataMetrics, needed_properties, textSummary } from '../lib/utils';
 import { getBaseUrlWithFallback } from '../config/credentials';
-import { endpoints } from '../config/environments';
-import { THRESHOLDS, DELAYS, HTTP_STATUS } from '../config/constants';
+import { DATA_VOLUMES, THRESHOLDS, DELAYS, HTTP_STATUS, PAGINATION } from '../config/constants';
 import { STANDARD_LOAD_STAGES, TAB_LOAD_THRESHOLDS } from '../config/load-profiles';
-import type { K6Options, SetupData, SummaryData, SummaryOutput } from '../types';
+import type {
+  K6Options,
+  MultiUserSetupData,
+  SummaryData,
+  SummaryOutput,
+  PaginatedResponse,
+  TransactionToSignDto,
+} from '../types';
+
+// Custom metrics
+const totalDurationTrend = new Trend('ready_to_sign_total_duration');
+const dataVolumeOk = new Rate('ready_to_sign_data_volume_ok');
+
+declare const __ENV: Record<string, string | undefined>;
+const DEBUG = __ENV.DEBUG === 'true';
 
 /**
  * k6 options configuration
@@ -34,7 +45,8 @@ export const options: K6Options = {
   },
   thresholds: {
     'http_req_duration{name:ready-to-sign}': [`${THRESHOLDS.P95_PERCENTILE}<${THRESHOLDS.PAGE_LOAD_MS}`],
-    'http_req_duration{name:sign-transaction}': [`${THRESHOLDS.P95_PERCENTILE}<${THRESHOLDS.SIGN_ALL_MS}`],
+    ready_to_sign_total_duration: [`${THRESHOLDS.P95_PERCENTILE}<${THRESHOLDS.PAGE_LOAD_MS}`],
+    ready_to_sign_data_volume_ok: ['rate==1'], // Must fetch target volume
     ...TAB_LOAD_THRESHOLDS,
   },
 };
@@ -42,33 +54,64 @@ export const options: K6Options = {
 const BASE_URL = getBaseUrlWithFallback();
 
 /**
- * Setup function - authenticates and returns token
+ * Setup function - authenticates all configured test users
  */
-export function setup(): SetupData {
-  return standardSetup(BASE_URL);
+export function setup(): MultiUserSetupData {
+  return multiUserSetup(BASE_URL);
 }
 
 /**
  * Main test function
+ * Fetches 200 items across 2 pages (100 items per page due to backend limit)
  */
-export default function (data: SetupData): void {
-  const { token } = data;
+export default function (data: MultiUserSetupData): void {
+  const token = getTokenForVU(data);
   if (!token) return;
 
   const headers = authHeaders(token);
 
   group('Ready to Sign Page', () => {
-    const res = http.get(`${BASE_URL}${endpoints['ready-to-sign']}`, {
-      ...headers,
-      tags: { name: 'ready-to-sign' },
+    const startTime = Date.now();
+    let totalItems = 0;
+    const targetCount = DATA_VOLUMES.READY_TO_SIGN; // 200
+    const pagesNeeded = Math.ceil(targetCount / PAGINATION.MAX_SIZE); // 2
+
+    for (let page = 1; page <= pagesNeeded; page++) {
+      const res = http.get(
+        `${BASE_URL}/transactions/sign?page=${page}&size=${PAGINATION.MAX_SIZE}`,
+        { ...headers, tags: { name: 'ready-to-sign' } },
+      );
+
+      check(res, {
+        [`ready-to-sign page ${page} status 200`]: (r) => r.status === HTTP_STATUS.OK,
+      });
+
+      if (res.status !== HTTP_STATUS.OK) {
+        break;
+      }
+
+      try {
+        const body = JSON.parse(res.body as string) as PaginatedResponse<TransactionToSignDto>;
+        totalItems += body.items.length;
+
+        // Stop if no more data
+        if (body.items.length < PAGINATION.MAX_SIZE) break;
+      } catch {
+        break;
+      }
+    }
+
+    const totalDuration = Date.now() - startTime;
+    totalDurationTrend.add(totalDuration);
+    dataVolumeOk.add(totalItems >= targetCount);
+
+    check(null, {
+      'ready-to-sign total time < 1s': () => totalDuration < THRESHOLDS.PAGE_LOAD_MS,
+      [`fetched ${targetCount}+ items`]: () => totalItems >= targetCount,
     });
 
-    check(res, {
-      'ready-to-sign status 200': (r) => r.status === HTTP_STATUS.OK,
-      'ready-to-sign response < 1s': (r) => r.timings.duration < THRESHOLDS.PAGE_LOAD_MS,
-    });
-
-    console.log(`Ready to Sign load time: ${formatDuration(res.timings.duration)}`);
+    if (DEBUG)
+      console.log(`Ready to Sign: ${totalItems} items in ${formatDuration(totalDuration)}`);
   });
 
   sleep(DELAYS.BETWEEN_ITERATIONS);
@@ -81,7 +124,6 @@ export function handleSummary(data: SummaryData): SummaryOutput {
   formatDataMetrics(data, needed_properties);
 
   return {
-    'k6/reports/ready-to-sign-report.html': htmlReport(data),
     'k6/reports/ready-to-sign.json': JSON.stringify(data, null, 2),
     stdout: textSummary(data, 'Ready to Sign'),
   };

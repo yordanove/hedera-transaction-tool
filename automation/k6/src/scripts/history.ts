@@ -6,17 +6,30 @@
  * - 100+ concurrent users
  */
 
-import { htmlReport } from 'https://raw.githubusercontent.com/benc-uk/k6-reporter/main/dist/bundle.js';
 import http from 'k6/http';
 import { check, sleep, group } from 'k6';
+import { Trend, Rate } from 'k6/metrics';
 import { authHeaders, formatDuration } from '../lib/helpers';
-import { standardSetup } from '../lib/setup';
+import { multiUserSetup, getTokenForVU } from '../lib/setup';
 import { formatDataMetrics, needed_properties, textSummary } from '../lib/utils';
 import { getBaseUrlWithFallback } from '../config/credentials';
-import { endpoints } from '../config/environments';
-import { THRESHOLDS, DELAYS, HTTP_STATUS } from '../config/constants';
+import { DATA_VOLUMES, THRESHOLDS, DELAYS, HTTP_STATUS, PAGINATION } from '../config/constants';
 import { STANDARD_LOAD_STAGES, TAB_LOAD_THRESHOLDS } from '../config/load-profiles';
-import type { K6Options, SetupData, SummaryData, SummaryOutput } from '../types';
+import type {
+  K6Options,
+  MultiUserSetupData,
+  SummaryData,
+  SummaryOutput,
+  PaginatedResponse,
+  Transaction,
+} from '../types';
+
+// Custom metrics
+const totalDurationTrend = new Trend('history_total_duration');
+const dataVolumeOk = new Rate('history_data_volume_ok');
+
+declare const __ENV: Record<string, string | undefined>;
+const DEBUG = __ENV.DEBUG === 'true';
 
 /**
  * k6 options configuration
@@ -32,6 +45,8 @@ export const options: K6Options = {
   },
   thresholds: {
     'http_req_duration{name:history}': [`${THRESHOLDS.P95_PERCENTILE}<${THRESHOLDS.PAGE_LOAD_MS}`],
+    history_total_duration: [`${THRESHOLDS.P95_PERCENTILE}<${THRESHOLDS.PAGE_LOAD_MS}`],
+    history_data_volume_ok: ['rate==1'], // Must fetch target volume
     ...TAB_LOAD_THRESHOLDS,
   },
 };
@@ -39,33 +54,63 @@ export const options: K6Options = {
 const BASE_URL = getBaseUrlWithFallback();
 
 /**
- * Setup function - authenticates and returns token
+ * Setup function - authenticates all configured test users
  */
-export function setup(): SetupData {
-  return standardSetup(BASE_URL);
+export function setup(): MultiUserSetupData {
+  return multiUserSetup(BASE_URL);
 }
 
 /**
  * Main test function
+ * Fetches 500 items across 5 pages (100 items per page due to backend limit)
  */
-export default function (data: SetupData): void {
-  const { token } = data;
+export default function (data: MultiUserSetupData): void {
+  const token = getTokenForVU(data);
   if (!token) return;
 
   const headers = authHeaders(token);
 
   group('History Page', () => {
-    const res = http.get(`${BASE_URL}${endpoints['history']}`, {
-      ...headers,
-      tags: { name: 'history' },
+    const startTime = Date.now();
+    let totalItems = 0;
+    const targetCount = DATA_VOLUMES.HISTORY; // 500
+    const pagesNeeded = Math.ceil(targetCount / PAGINATION.MAX_SIZE); // 5
+
+    for (let page = 1; page <= pagesNeeded; page++) {
+      const res = http.get(
+        `${BASE_URL}/transactions/history?page=${page}&size=${PAGINATION.MAX_SIZE}`,
+        { ...headers, tags: { name: 'history' } },
+      );
+
+      check(res, {
+        [`history page ${page} status 200`]: (r) => r.status === HTTP_STATUS.OK,
+      });
+
+      if (res.status !== HTTP_STATUS.OK) {
+        break;
+      }
+
+      try {
+        const body = JSON.parse(res.body as string) as PaginatedResponse<Transaction>;
+        totalItems += body.items.length;
+
+        // Stop if no more data
+        if (body.items.length < PAGINATION.MAX_SIZE) break;
+      } catch {
+        break;
+      }
+    }
+
+    const totalDuration = Date.now() - startTime;
+    totalDurationTrend.add(totalDuration);
+    dataVolumeOk.add(totalItems >= targetCount);
+
+    check(null, {
+      'history total time < 1s': () => totalDuration < THRESHOLDS.PAGE_LOAD_MS,
+      [`fetched ${targetCount}+ items`]: () => totalItems >= targetCount,
     });
 
-    check(res, {
-      'history status 200': (r) => r.status === HTTP_STATUS.OK,
-      'history response < 1s': (r) => r.timings.duration < THRESHOLDS.PAGE_LOAD_MS,
-    });
-
-    console.log(`History load time: ${formatDuration(res.timings.duration)}`);
+    if (DEBUG) console.log(`History: ${totalItems} items in ${formatDuration(totalDuration)}`);
   });
 
   sleep(DELAYS.BETWEEN_ITERATIONS);
@@ -78,7 +123,6 @@ export function handleSummary(data: SummaryData): SummaryOutput {
   formatDataMetrics(data, needed_properties);
 
   return {
-    'k6/reports/history-report.html': htmlReport(data),
     'k6/reports/history.json': JSON.stringify(data, null, 2),
     stdout: textSummary(data, 'History'),
   };

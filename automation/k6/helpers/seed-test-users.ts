@@ -78,7 +78,7 @@ async function seedUsers(): Promise<void> {
       console.log(`User ${TEST_USER.email} already exists (id: ${existing.rows[0].id})`);
       console.log('\nYou can run k6 tests with:');
       console.log(
-        `  k6 run -e USER_EMAIL='${TEST_USER.email}' -e USER_PASSWORD='${TEST_USER.password}' k6/scripts/tab-load-times.js`,
+        `  k6 run -e USER_EMAIL='${TEST_USER.email}' -e USER_PASSWORD='${TEST_USER.password}' k6/dist/tab-load-times.js`,
       );
       return;
     }
@@ -97,7 +97,7 @@ async function seedUsers(): Promise<void> {
     console.log(`Created user: ${TEST_USER.email} (id: ${result.rows[0].id})`);
     console.log('\nYou can now run k6 tests with:');
     console.log(
-      `  k6 run -e USER_EMAIL='${TEST_USER.email}' -e USER_PASSWORD='${TEST_USER.password}' k6/scripts/tab-load-times.js`,
+      `  k6 run -e USER_EMAIL='${TEST_USER.email}' -e USER_PASSWORD='${TEST_USER.password}' k6/dist/tab-load-times.js`,
     );
   } catch (error) {
     const err = error as NodeJS.ErrnoException;
