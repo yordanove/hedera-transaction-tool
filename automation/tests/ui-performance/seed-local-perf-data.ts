@@ -100,7 +100,7 @@ async function seedAccounts(db: sqlite3.Database, userId: string): Promise<numbe
       const id = crypto.randomUUID();
       const accountId = `0.0.${1000 + i}`;
       const nickname = `Perf Test Account ${i + 1}`;
-      const network = 'testnet';
+      const network = 'mainnet';
 
       stmt.run([id, userId, accountId, nickname, network], function (err) {
         if (err) {
@@ -135,7 +135,7 @@ async function seedFiles(db: sqlite3.Database, userId: string): Promise<number> 
     for (let i = 0; i < TARGET_COUNT; i++) {
       const id = crypto.randomUUID();
       const fileId = `0.0.${2000 + i}`;
-      const network = 'testnet';
+      const network = 'mainnet';
       const nickname = `Perf Test File ${i + 1}`;
       const description = `Performance test file ${i + 1}`;
 

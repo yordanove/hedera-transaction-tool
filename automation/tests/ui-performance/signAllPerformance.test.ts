@@ -24,16 +24,18 @@ import { setupApp, closeApp } from '../../utils/util.js';
 import { resetDbState } from '../../utils/databaseUtil.js';
 import { RegistrationPage } from '../../pages/RegistrationPage.js';
 import { OrganizationPage } from '../../pages/OrganizationPage.js';
-import { formatDuration } from './performanceUtils.js';
+import { formatDuration, waitForRowCount } from './performanceUtils.js';
+import {
+  seedOrgPerfData,
+  readSeedMnemonic,
+  K6_USER_EMAIL,
+  K6_USER_PASSWORD,
+} from './seed-org-perf-data.js';
 
 dotenv.config();
 
 const SIGN_ALL_THRESHOLD_MS = 4000; // 4 seconds
-const TRANSACTION_ROW_SELECTOR = '.table tbody tr';
-
-// k6 perf test user credentials (created by k6:seed)
-const K6_USER_EMAIL = 'k6perf@test.com';
-const K6_USER_PASSWORD = 'Password123';
+const TRANSACTION_ROW_SELECTOR = '.table-custom tbody tr';
 
 let app: ElectronApplication;
 let window: Page;
@@ -42,6 +44,9 @@ let organizationPage: OrganizationPage;
 
 test.describe('Sign All Performance (Org Mode)', () => {
   test.beforeAll(async () => {
+    // Seed org-mode test data (creates k6 user + transactions + mnemonic)
+    await seedOrgPerfData();
+
     await resetDbState();
     ({ app, window } = await setupApp());
     registrationPage = new RegistrationPage(window);
@@ -61,7 +66,36 @@ test.describe('Sign All Performance (Org Mode)', () => {
     );
     await organizationPage.signInOrganization(K6_USER_EMAIL, K6_USER_PASSWORD, localPassword);
 
-    console.log('Signed into organization as k6perf@test.com');
+    // Complete Account Setup by IMPORTING the mnemonic from seed
+    await registrationPage.waitForElementToBeVisible(registrationPage.createNewTabSelector);
+    console.log('Account Setup screen visible, importing seed mnemonic...');
+
+    // Read the mnemonic saved by seedOrgPerfData
+    const words = readSeedMnemonic();
+    console.log(`Read mnemonic with ${words.length} words`);
+
+    // Use Import tab to import the mnemonic
+    await registrationPage.clickOnImportTab();
+
+    // Fill all 24 recovery phrase words
+    for (let i = 0; i < 24; i++) {
+      await registrationPage.fillRecoveryPhraseWord(i + 1, words[i]);
+    }
+
+    // Complete import flow
+    await registrationPage.scrollToNextImportButton();
+    await registrationPage.clickOnNextImportButton();
+
+    // Wait for Key Pairs screen (button-next-import disappears)
+    await window.waitForSelector('[data-testid="button-next-import"]', { state: 'hidden', timeout: 10000 });
+    console.log('On Key Pairs screen');
+
+    // Wait for toast to disappear before clicking Next
+    await registrationPage.waitForElementToDisappear(registrationPage.toastMessageSelector);
+
+    // Click final Next button with retry - waits for settings link (same pattern as working tests)
+    await registrationPage.clickOnFinalNextButtonWithRetry();
+    console.log('Account Setup completed');
   });
 
   test.afterAll(async () => {
@@ -74,52 +108,60 @@ test.describe('Sign All Performance (Org Mode)', () => {
     await window.click('[data-testid="button-menu-transactions"]');
     await window.waitForLoadState('networkidle');
     await window.click('text=Ready to Sign');
+
+    // Wait for the transaction API response
+    await window.waitForResponse(
+      (res) => res.url().includes('/transactions/sign') || res.url().includes('/transaction-nodes'),
+      { timeout: 10000 }
+    );
     await window.waitForLoadState('networkidle');
 
-    // Count initial transactions
-    const initialRows = await window.$$(TRANSACTION_ROW_SELECTOR);
-    const initialCount = initialRows.length;
-    console.log(`Found ${initialCount} transactions to sign`);
+    // Wait for transaction groups to appear
+    const groupRowCount = await waitForRowCount(window, TRANSACTION_ROW_SELECTOR, 1, 5000);
+    console.log(`Found ${groupRowCount} transaction groups`);
 
-    if (initialCount === 0) {
-      console.warn('No transactions to sign - skipping test. Run k6:seed:all first.');
-      test.skip();
-      return;
+    // Click Details on the group row to navigate to group details page
+    // Try both selector patterns - data-testid or text content
+    let detailsButton = await window.$('[data-testid^="button-transaction-node-details-"]');
+    if (!detailsButton) {
+      detailsButton = await window.$('button:has-text("Details")');
     }
+    expect(detailsButton, 'Details button not found on group row').not.toBeNull();
+    await detailsButton!.click();
 
-    // Look for Sign All button (selector may need adjustment based on actual UI)
-    const signAllButton = await window.$('button:has-text("Sign All")');
-    if (!signAllButton) {
-      console.warn('Sign All button not found - UI may not support batch signing');
-      test.skip();
-      return;
-    }
+    // Wait for group details page to load
+    await window.waitForLoadState('networkidle');
+
+    // Wait for Sign All button to appear on the group details page
+    const signAllButton = await window.waitForSelector('[data-testid="button-sign-group"]', { timeout: 10000 });
+    expect(signAllButton, 'Sign All button not found on group details page').not.toBeNull();
+    console.log('Found Sign All button on group details page');
+
+    // Count transactions in the group
+    const initialCount = await waitForRowCount(window, TRANSACTION_ROW_SELECTOR, 1, 5000);
+    expect(initialCount, 'No transactions in group').toBeGreaterThan(0);
+    console.log(`Group has ${initialCount} transactions to sign`);
 
     // Measure time to sign all
     const startTime = Date.now();
 
     await signAllButton.click();
 
-    // Wait for signing to complete - transactions should disappear or change status
-    await window.waitForFunction(
-      (selector: string, count: number) => {
-        const rows = document.querySelectorAll(selector);
-        return rows.length < count;
-      },
-      { timeout: SIGN_ALL_THRESHOLD_MS + 2000 },
-      TRANSACTION_ROW_SELECTOR,
-      initialCount,
-    );
+    // Wait for confirmation modal and confirm
+    const confirmButton = await window.waitForSelector('button:has-text("Confirm")', {
+      timeout: 10000,
+    });
+    await confirmButton.click();
+
+    // Wait for success toast to confirm completion
+    await window.waitForSelector('.v-toast__text:has-text("Transactions signed successfully")', {
+      timeout: 20000,
+    });
 
     const signTime = Date.now() - startTime;
 
-    // Count remaining transactions
-    const remainingRows = await window.$$(TRANSACTION_ROW_SELECTOR);
-    const signedCount = initialCount - remainingRows.length;
-
-    console.log(`Sign All: ${signedCount}/${initialCount} signed in ${formatDuration(signTime)}`);
+    console.log(`Sign All completed in ${formatDuration(signTime)}`);
 
     expect(signTime).toBeLessThan(SIGN_ALL_THRESHOLD_MS);
-    expect(signedCount).toBeGreaterThan(0);
   });
 });

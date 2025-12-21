@@ -1,15 +1,12 @@
 /**
- * Performance Test: History Tab (Org Mode)
+ * Performance Test: Ready for Review Tab (Org Mode)
  *
- * Requirement: 500 transactions load in ≤ 1s
+ * Requirement: Tab loads in ≤ 1s
  * Data source: Backend PostgreSQL (seeded by k6:seed:all)
  *
  * Prerequisites:
  * - Backend running (docker-compose up)
  * - Run: npm run k6:seed:all
- *
- * Note: History may be paginated. This test measures initial page load time.
- * If pagination is used, it verifies at least the first page loads quickly.
  */
 
 import { test, expect, ElectronApplication, Page } from '@playwright/test';
@@ -42,7 +39,7 @@ let window: Page;
 let registrationPage: RegistrationPage;
 let organizationPage: OrganizationPage;
 
-test.describe('History Performance (Org Mode)', () => {
+test.describe('Ready for Review Performance (Org Mode)', () => {
   test.beforeAll(async () => {
     // Seed org-mode test data (creates k6 user + transactions + mnemonic)
     await seedOrgPerfData();
@@ -55,7 +52,7 @@ test.describe('History Performance (Org Mode)', () => {
     // Register locally with unique email
     const localPassword = 'TestPassword123';
     await registrationPage.completeRegistration(
-      `perf-history-${Date.now()}@test.com`,
+      `perf-ready-for-review-${Date.now()}@test.com`,
       localPassword,
     );
 
@@ -103,20 +100,18 @@ test.describe('History Performance (Org Mode)', () => {
     await resetDbState();
   });
 
-  test('History tab should load in under 1 second (p95)', async () => {
-    // Navigate to Transactions page and History first
+  test('Ready for Review tab should load in under 1 second (p95)', async () => {
+    // Navigate to Transactions page and Ready for Review first
     await window.click('[data-testid="button-menu-transactions"]');
     await window.waitForLoadState('networkidle');
-
-    // Click History and wait for its API response
-    // Use Promise.all to capture the response that comes after clicking
-    // App uses either /transaction-nodes or /transactions/history depending on version
     await Promise.all([
       window.waitForResponse(
-        (res) => res.url().includes('localhost:3001') && res.url().includes('transaction'),
+        (res) =>
+          res.url().includes('/transaction-nodes') ||
+          res.url().includes('/transactions/approve'),
         { timeout: 10000 }
       ),
-      window.click('text=History'),
+      window.click('text=Ready for Review'),
     ]);
     await window.waitForLoadState('networkidle');
 
@@ -126,24 +121,26 @@ test.describe('History Performance (Org Mode)', () => {
     // Verify data is visible before measuring
     const initialRowCount = await waitForRowCount(window, TRANSACTION_ROW_SELECTOR, 1, 5000);
     expect(initialRowCount, 'No transactions visible - check k6:seed:all and network').toBeGreaterThan(0);
-    console.log(`Found ${initialRowCount} transactions on History tab`);
+    console.log(`Found ${initialRowCount} transactions on Ready for Review tab`);
 
     // Collect multiple samples for p95
     const samples = await collectPerformanceSamples(async () => {
       // Navigate away first
-      await window.click('text=Ready to Sign');
+      await window.click('text=History');
       await window.waitForLoadState('networkidle');
 
       // Measure page load time
       const startTime = Date.now();
-      await window.click('text=History');
+      await window.click('text=Ready for Review');
       await window.waitForLoadState('networkidle');
       const loadTime = Date.now() - startTime;
 
       return loadTime;
     }, 5);
 
-    console.log(`History p95: ${formatDuration(samples.p95)}, avg: ${formatDuration(samples.avg)}`);
+    console.log(
+      `Ready for Review p95: ${formatDuration(samples.p95)}, avg: ${formatDuration(samples.avg)}`,
+    );
     console.log(`  Samples: ${samples.values.map((v) => formatDuration(v)).join(', ')}`);
 
     expect(samples.p95).toBeLessThan(TARGET_LOAD_TIME_MS);

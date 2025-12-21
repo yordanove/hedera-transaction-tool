@@ -72,7 +72,13 @@ async function seedUsers(): Promise<void> {
     );
 
     if (existing.rows.length > 0) {
-      console.log(`User ${TEST_USER.email} already exists (id: ${existing.rows[0].id})`);
+      // User exists - update password to ensure it matches expected value
+      const hashedPassword = await hashPassword(TEST_USER.password);
+      await client.query(
+        `UPDATE "user" SET password = $1 WHERE email = $2`,
+        [hashedPassword, TEST_USER.email],
+      );
+      console.log(`User ${TEST_USER.email} already exists (id: ${existing.rows[0].id}) - password updated`);
       console.log('\nYou can run k6 tests with:');
       console.log(
         `  k6 run -e USER_EMAIL='${TEST_USER.email}' -e USER_PASSWORD='${TEST_USER.password}' k6/dist/tab-load-times.js`,

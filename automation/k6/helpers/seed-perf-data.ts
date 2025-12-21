@@ -20,8 +20,10 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import argon2 from 'argon2';
 import {
   PrivateKey,
+  Mnemonic,
   FileCreateTransaction,
   AccountId,
   Timestamp,
@@ -38,11 +40,14 @@ const SEED_MARKER = 'k6-perf-seed';
 // Generated keypair for signing - stored in user_key table
 let testPrivateKey: PrivateKey;
 let testPublicKeyHex: string;
+let testMnemonic: Mnemonic;
+let testMnemonicHash: string;
 
 // Data volume requirements
 const SIGN_COUNT = 200;
 const HISTORY_COUNT = 500;
 const APPROVE_COUNT = 100;
+const GROUP_SIZE = 10;  // Transactions per group for Sign All testing
 
 interface UserRow {
   id: number;
@@ -73,12 +78,26 @@ function getTestUserEmail(): string {
   return process.env.TEST_USER_EMAIL || DEFAULT_EMAIL;
 }
 
-function initializeKeyPair(): void {
-  // Generate a real ED25519 keypair
-  testPrivateKey = PrivateKey.generateED25519();
+async function initializeKeyPair(): Promise<void> {
+  // Generate a mnemonic (24 words) so it can be imported during Account Setup
+  testMnemonic = await Mnemonic.generate();
+  // Derive the private key from the mnemonic
+  testPrivateKey = await testMnemonic.toStandardEd25519PrivateKey('', 0);
   // Get public key in hex format (without DER prefix for storage)
   testPublicKeyHex = testPrivateKey.publicKey.toStringRaw();
-  console.log(`Generated test keypair: ${testPublicKeyHex.substring(0, 16)}...`);
+
+  // Hash the mnemonic the same way front-end does: words.toString() (comma-separated)
+  // This is required for accountSetupRequired() to return false
+  const mnemonicWords = testMnemonic.toString().split(' ');
+  testMnemonicHash = await argon2.hash(mnemonicWords.toString(), {
+    type: argon2.argon2id,
+    memoryCost: 65536,
+    timeCost: 3,
+    parallelism: 4,
+  });
+
+  console.log(`Generated test keypair from mnemonic: ${testPublicKeyHex.substring(0, 16)}...`);
+  console.log(`Mnemonic hash: ${testMnemonicHash.substring(0, 30)}...`);
 }
 
 function generateTransactionId(index: number): string {
@@ -97,26 +116,36 @@ async function findOrCreateUserKey(
 ): Promise<number> {
   // Store the actual public key (raw hex) - must match what SDK's toStringRaw() returns
   // The backend compares user.keys against transaction's required keys using this format
+  // IMPORTANT: Include mnemonicHash and index so accountSetupRequired() returns false
+  // Without mnemonicHash, the Import flow gets stuck on Key Pairs screen
   const result: QueryResult<UserKeyRow> = await client.query(
-    `INSERT INTO user_key ("userId", "publicKey", "deletedAt")
-     VALUES ($1, $2, NULL)
+    `INSERT INTO user_key ("userId", "publicKey", "mnemonicHash", "index", "deletedAt")
+     VALUES ($1, $2, $3, $4, NULL)
      RETURNING id`,
-    [userId, testPublicKeyHex],
+    [userId, testPublicKeyHex, testMnemonicHash, 0],
   );
 
-  console.log(`Created UserKey: ${result.rows[0].id} (publicKey: ${testPublicKeyHex.substring(0, 16)}...)`);
+  console.log(`Created UserKey: ${result.rows[0].id} (publicKey: ${testPublicKeyHex.substring(0, 16)}..., mnemonicHash: present, index: 0)`);
   return result.rows[0].id;
 }
 
 async function cleanupPreviousSeed(client: Client, userId: number): Promise<void> {
   console.log('Cleaning up previous seed data...');
 
-  // First, get the user key IDs used by seeded transactions (so we can delete them later)
-  const keyIdsResult = await client.query(
-    `SELECT DISTINCT "creatorKeyId" FROM "transaction" WHERE description LIKE $1`,
+  // Delete transaction_group_item entries (FK constraint on transactions)
+  await client.query(
+    `DELETE FROM transaction_group_item
+     WHERE "transactionId" IN (
+       SELECT id FROM "transaction" WHERE description LIKE $1
+     )`,
     [`${SEED_MARKER}%`],
   );
-  const keyIdsToDelete = keyIdsResult.rows.map((r: { creatorKeyId: number }) => r.creatorKeyId);
+
+  // Delete transaction_group entries
+  await client.query(
+    `DELETE FROM transaction_group WHERE description LIKE $1`,
+    [`${SEED_MARKER}%`],
+  );
 
   // Delete transaction_signer entries first (FK constraint)
   await client.query(
@@ -144,16 +173,14 @@ async function cleanupPreviousSeed(client: Client, userId: number): Promise<void
 
   console.log(`Deleted ${txResult.rowCount} previous seed transactions`);
 
-  // Now delete the user keys that were used by seeded transactions
-  if (keyIdsToDelete.length > 0) {
-    const keyResult = await client.query(
-      `DELETE FROM user_key WHERE id = ANY($1) AND "userId" = $2`,
-      [keyIdsToDelete, userId],
-    );
-
-    if (keyResult.rowCount && keyResult.rowCount > 0) {
-      console.log(`Deleted ${keyResult.rowCount} previous seed user keys`);
-    }
+  // Delete ALL user keys for this user (ensures clean state for Account Setup)
+  // This is more aggressive but ensures the test user always needs Account Setup
+  const keyResult = await client.query(
+    `DELETE FROM user_key WHERE "userId" = $1`,
+    [userId],
+  );
+  if (keyResult.rowCount && keyResult.rowCount > 0) {
+    console.log(`Deleted ${keyResult.rowCount} user keys for test user`);
   }
 }
 
@@ -263,7 +290,7 @@ async function insertTransaction(
       creatorKeyId,
       signature,
       validStart,
-      'testnet',
+      'mainnet',
       false,
       executedAt,
     ],
@@ -307,7 +334,7 @@ async function seedSignTransactions(
         userKeyId,
         txData.signature,
         txData.validStart,
-        'testnet',
+        'mainnet',
         false,
         null,
       ],
@@ -346,6 +373,7 @@ async function seedHistoryTransactions(
       status,
       userKeyId,
       executedAt,
+      true,  // useRealTx - dummy bytes cause "invalid wire type" protobuf errors
     );
 
     if ((i + 1) % 100 === 0) {
@@ -390,7 +418,7 @@ async function seedApproveTransactions(
         userKeyId,
         txData.signature,
         txData.validStart,
-        'testnet',
+        'mainnet',
         false,
         null,
       ],
@@ -419,6 +447,88 @@ async function seedApproveTransactions(
   }
 
   console.log(`  Completed: ${APPROVE_COUNT} approve transactions`);
+}
+
+interface GroupRow {
+  id: number;
+}
+
+/**
+ * Seed a transaction group for Sign All button testing
+ * Creates one group with GROUP_SIZE transactions linked to it
+ */
+async function seedTransactionGroups(
+  client: Client,
+  userKeyId: number,
+): Promise<void> {
+  console.log(`\nSeeding transaction group with ${GROUP_SIZE} transactions for Sign All...`);
+  console.log('  (Using real Hedera SDK transactions)');
+
+  // Calculate offset to avoid ID collisions with other seeded transactions
+  const offset = SIGN_COUNT + HISTORY_COUNT + APPROVE_COUNT;
+
+  // 1. Create the transaction group
+  const groupResult: QueryResult<GroupRow> = await client.query(
+    `INSERT INTO "transaction_group" (description, atomic, sequential, "createdAt")
+     VALUES ($1, $2, $3, NOW())
+     RETURNING id`,
+    [`${SEED_MARKER}-group`, false, false],
+  );
+  const groupId = groupResult.rows[0].id;
+  console.log(`  Created transaction_group: ${groupId}`);
+
+  // 2. Create transactions and collect their IDs
+  const transactionIds: number[] = [];
+
+  for (let i = 0; i < GROUP_SIZE; i++) {
+    const txData = createFileCreateTransaction(offset + i);
+
+    const result: QueryResult<TransactionRow> = await client.query(
+      `INSERT INTO "transaction" (
+         name, type, description, "transactionId", "transactionHash",
+         "transactionBytes", "unsignedTransactionBytes", status,
+         "creatorKeyId", signature, "validStart", "mirrorNetwork",
+         "isManual", "executedAt", "createdAt", "updatedAt"
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
+       RETURNING id`,
+      [
+        `Group Tx ${i + 1}`,
+        'FILE CREATE',
+        `${SEED_MARKER}-group-item-${Date.now()}-${i}`,
+        txData.transactionId,
+        txData.transactionHash,
+        txData.transactionBytes,
+        txData.unsignedTransactionBytes,
+        'WAITING FOR SIGNATURES',
+        userKeyId,
+        txData.signature,
+        txData.validStart,
+        'mainnet',
+        false,
+        null,
+      ],
+    );
+
+    transactionIds.push(result.rows[0].id);
+
+    // Collect for signature generation (group transactions also need signing)
+    signTransactionsData.push({
+      transactionId: txData.transactionId,
+      unsignedBytes: txData.unsignedTransactionBytes,
+    });
+  }
+
+  // 3. Link transactions to group via transaction_group_item
+  for (let i = 0; i < transactionIds.length; i++) {
+    await client.query(
+      `INSERT INTO "transaction_group_item" (seq, "transactionId", "groupId")
+       VALUES ($1, $2, $3)`,
+      [i, transactionIds[i], groupId],
+    );
+  }
+
+  console.log(`  Completed: 1 group with ${GROUP_SIZE} transactions (IDs: ${transactionIds[0]}-${transactionIds[transactionIds.length - 1]})`);
 }
 
 // Backend expects: { nodeAccountId: { transactionId: { derPublicKey: "0x" + signatureHex }}}
@@ -489,7 +599,7 @@ function generateSignaturesFile(): void {
 }
 
 /**
- * Save the test private key for debugging/manual signing
+ * Save the test private key and mnemonic for Account Setup import
  */
 function savePrivateKey(): void {
   const dataDir = path.join(__dirname, '../data');
@@ -497,15 +607,19 @@ function savePrivateKey(): void {
 
   const keyPath = path.join(dataDir, 'test-private-key.txt');
   fs.writeFileSync(keyPath, testPrivateKey.toStringRaw());
-
   console.log(`  Saved private key to: ${keyPath}`);
+
+  // Save mnemonic for Account Setup import during UI tests
+  const mnemonicPath = path.join(dataDir, 'test-mnemonic.txt');
+  fs.writeFileSync(mnemonicPath, testMnemonic.toString());
+  console.log(`  Saved mnemonic to: ${mnemonicPath}`);
 }
 
 async function seedData(): Promise<void> {
   const email = getTestUserEmail();
 
   // Initialize keypair for signing transactions
-  initializeKeyPair();
+  await initializeKeyPair();
 
   const client = new Client({
     host: process.env.POSTGRES_HOST || 'localhost',
@@ -547,6 +661,7 @@ async function seedData(): Promise<void> {
     await seedSignTransactions(client, userKeyId);
     await seedHistoryTransactions(client, userKeyId);
     await seedApproveTransactions(client, userId, userKeyId);
+    await seedTransactionGroups(client, userKeyId);
 
     // Generate signatures.json for PRE_SIGNED mode
     generateSignaturesFile();
@@ -555,12 +670,13 @@ async function seedData(): Promise<void> {
     savePrivateKey();
 
     // Summary
-    const total = SIGN_COUNT + HISTORY_COUNT + APPROVE_COUNT;
+    const total = SIGN_COUNT + HISTORY_COUNT + APPROVE_COUNT + GROUP_SIZE;
     console.log('\n=== Seeding Complete ===');
     console.log(`Total transactions created: ${total}`);
     console.log(`  /transactions/sign: ${SIGN_COUNT}`);
     console.log(`  /transactions/history: ${HISTORY_COUNT}`);
     console.log(`  /transactions/approve: ${APPROVE_COUNT}`);
+    console.log(`  Transaction group: 1 group with ${GROUP_SIZE} transactions`);
     console.log('\nRun k6 tests with:');
     console.log(
       `  k6 run -e USER_EMAIL='${email}' -e USER_PASSWORD='yourpassword' k6/dist/tab-load-times.js`,

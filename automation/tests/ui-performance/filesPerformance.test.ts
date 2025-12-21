@@ -16,13 +16,11 @@ import {
   TARGET_LOAD_TIME_MS,
   collectPerformanceSamples,
   waitForRowCount,
-  setPageSize,
   formatDuration,
 } from './performanceUtils.js';
 
 const DB_ITEM_COUNT = 100;
-const PAGE_SIZE = 50;
-const FILE_ROW_SELECTOR = '.table tbody tr';
+const FILE_ROW_SELECTOR = '[data-testid^="p-file-id-"]';
 
 let app: ElectronApplication;
 let window: Page;
@@ -68,6 +66,10 @@ test.describe('Files Page Performance', () => {
       await window.click('[data-testid="button-menu-files"]');
       await window.waitForLoadState('networkidle');
       const loadTime = Date.now() - startTime;
+
+      // Verify rows rendered (hard fail if empty)
+      const rowCount = await waitForRowCount(window, FILE_ROW_SELECTOR, 1, 5000);
+      expect(rowCount, 'No files rendered - check seeding').toBeGreaterThan(0);
 
       return loadTime;
     }, 5);
