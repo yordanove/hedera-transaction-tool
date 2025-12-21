@@ -47,7 +47,7 @@ let testMnemonicHash: string;
 const SIGN_COUNT = 200;
 const HISTORY_COUNT = 500;
 const APPROVE_COUNT = 100;
-const GROUP_SIZE = 10;  // Transactions per group for Sign All testing
+const GROUP_SIZE = 100;  // Transactions per group for Sign All testing (requirement: 100)
 
 interface UserRow {
   id: number;

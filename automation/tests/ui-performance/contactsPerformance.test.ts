@@ -23,6 +23,7 @@ import {
 dotenv.config();
 
 const DB_ITEM_COUNT = 100;
+const MIN_CONTACTS = 50; // Strict: require at least 50 contacts rendered
 // Contacts are rendered as divs, not table rows
 const CONTACT_ROW_SELECTOR = '.container-multiple-select';
 
@@ -111,9 +112,9 @@ test.describe('Contacts Page Performance', () => {
       await window.waitForLoadState('networkidle');
       const loadTime = Date.now() - startTime;
 
-      // Verify rows rendered (hard fail if empty)
-      const rowCount = await waitForRowCount(window, CONTACT_ROW_SELECTOR, 1, 5000);
-      expect(rowCount, 'No contacts rendered - check user creation').toBeGreaterThan(0);
+      // Verify rows rendered (STRICT: require minimum volume)
+      const rowCount = await waitForRowCount(window, CONTACT_ROW_SELECTOR, MIN_CONTACTS, 5000);
+      expect(rowCount, `Only ${rowCount} contacts rendered, need >= ${MIN_CONTACTS}`).toBeGreaterThanOrEqual(MIN_CONTACTS);
 
       return loadTime;
     }, 5);

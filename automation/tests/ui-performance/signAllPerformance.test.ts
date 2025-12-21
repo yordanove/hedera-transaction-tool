@@ -35,6 +35,7 @@ import {
 dotenv.config();
 
 const SIGN_ALL_THRESHOLD_MS = 4000; // 4 seconds
+const MIN_GROUP_SIZE = 100; // Strict: require 100 transactions in group (per requirements)
 const TRANSACTION_ROW_SELECTOR = '.table-custom tbody tr';
 
 let app: ElectronApplication;
@@ -116,18 +117,18 @@ test.describe('Sign All Performance (Org Mode)', () => {
     );
     await window.waitForLoadState('networkidle');
 
-    // Wait for transaction groups to appear
-    const groupRowCount = await waitForRowCount(window, TRANSACTION_ROW_SELECTOR, 1, 5000);
-    console.log(`Found ${groupRowCount} transaction groups`);
+    // Wait for transaction rows to appear
+    const rowCount = await waitForRowCount(window, TRANSACTION_ROW_SELECTOR, 1, 5000);
+    console.log(`Found ${rowCount} transaction rows`);
 
-    // Click Details on the group row to navigate to group details page
-    // Try both selector patterns - data-testid or text content
-    let detailsButton = await window.$('[data-testid^="button-transaction-node-details-"]');
-    if (!detailsButton) {
-      detailsButton = await window.$('button:has-text("Details")');
-    }
-    expect(detailsButton, 'Details button not found on group row').not.toBeNull();
-    await detailsButton!.click();
+    // Find a group row using the bi-stack icon (reliable group marker)
+    const groupRow = window.locator('tr').filter({ has: window.locator('i.bi-stack') }).first();
+    await expect(groupRow, 'No group row found - check seeding').toBeVisible({ timeout: 5000 });
+    console.log('Found group row with bi-stack icon');
+
+    // Click Details button inside the group row
+    const detailsButton = groupRow.locator('button:has-text("Details")');
+    await detailsButton.click();
 
     // Wait for group details page to load
     await window.waitForLoadState('networkidle');
@@ -137,9 +138,9 @@ test.describe('Sign All Performance (Org Mode)', () => {
     expect(signAllButton, 'Sign All button not found on group details page').not.toBeNull();
     console.log('Found Sign All button on group details page');
 
-    // Count transactions in the group
-    const initialCount = await waitForRowCount(window, TRANSACTION_ROW_SELECTOR, 1, 5000);
-    expect(initialCount, 'No transactions in group').toBeGreaterThan(0);
+    // Count transactions in the group (STRICT: require minimum volume)
+    const initialCount = await waitForRowCount(window, TRANSACTION_ROW_SELECTOR, MIN_GROUP_SIZE, 15000);
+    expect(initialCount, `Group has ${initialCount} txns, need >= ${MIN_GROUP_SIZE}`).toBeGreaterThanOrEqual(MIN_GROUP_SIZE);
     console.log(`Group has ${initialCount} transactions to sign`);
 
     // Measure time to sign all

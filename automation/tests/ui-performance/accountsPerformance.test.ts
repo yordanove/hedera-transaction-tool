@@ -20,6 +20,7 @@ import {
 } from './performanceUtils.js';
 
 const DB_ITEM_COUNT = 100;
+const MIN_ROWS = 50; // Strict: require at least 50 rows rendered
 const ACCOUNT_ROW_SELECTOR = '[data-testid^="p-account-id-"]';
 
 let app: ElectronApplication;
@@ -67,9 +68,9 @@ test.describe('Accounts Page Performance', () => {
       await window.waitForLoadState('networkidle');
       const loadTime = Date.now() - startTime;
 
-      // Verify rows rendered (hard fail if empty)
-      const rowCount = await waitForRowCount(window, ACCOUNT_ROW_SELECTOR, 1, 5000);
-      expect(rowCount, 'No accounts rendered - check seeding').toBeGreaterThan(0);
+      // Verify rows rendered (STRICT: require minimum volume)
+      const rowCount = await waitForRowCount(window, ACCOUNT_ROW_SELECTOR, MIN_ROWS, 5000);
+      expect(rowCount, `Only ${rowCount} accounts rendered, need >= ${MIN_ROWS}`).toBeGreaterThanOrEqual(MIN_ROWS);
 
       return loadTime;
     }, 5);

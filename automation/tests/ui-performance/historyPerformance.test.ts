@@ -24,6 +24,7 @@ import {
   formatDuration,
   setPageSize,
   waitForRowCount,
+  getPagerTotal,
 } from './performanceUtils.js';
 import {
   seedOrgPerfData,
@@ -35,6 +36,7 @@ import {
 dotenv.config();
 
 const PAGE_SIZE = 50;
+const REQUIRED_TOTAL = 500; // Minimum transactions expected from seeding
 const TRANSACTION_ROW_SELECTOR = '.table-custom tbody tr';
 
 let app: ElectronApplication;
@@ -123,6 +125,12 @@ test.describe('History Performance (Org Mode)', () => {
     // Try to set page size if pager exists
     await setPageSize(window, PAGE_SIZE);
 
+    // Validate pager shows sufficient total items (volume enforcement - STRICT)
+    const pagerTotal = await getPagerTotal(window);
+    expect(pagerTotal, 'Pager not found - volume enforcement failed').not.toBeNull();
+    expect(pagerTotal!, `Pager shows only ${pagerTotal} items, need >= ${REQUIRED_TOTAL}`).toBeGreaterThanOrEqual(REQUIRED_TOTAL);
+    console.log(`Pager total: ${pagerTotal} items`);
+
     // Verify data is visible before measuring
     const initialRowCount = await waitForRowCount(window, TRANSACTION_ROW_SELECTOR, 1, 5000);
     expect(initialRowCount, 'No transactions visible - check k6:seed:all and network').toBeGreaterThan(0);
@@ -139,6 +147,10 @@ test.describe('History Performance (Org Mode)', () => {
       await window.click('text=History');
       await window.waitForLoadState('networkidle');
       const loadTime = Date.now() - startTime;
+
+      // Verify rows rendered during sample (consistency with local-mode tests)
+      const rowCount = await waitForRowCount(window, TRANSACTION_ROW_SELECTOR, 1, 5000);
+      expect(rowCount, 'No rows rendered during sample').toBeGreaterThan(0);
 
       return loadTime;
     }, 5);

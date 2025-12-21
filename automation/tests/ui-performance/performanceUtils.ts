@@ -157,3 +157,16 @@ export async function setPageSize(window: Page, size: 5 | 10 | 20 | 50): Promise
   await window.waitForLoadState('networkidle');
   return true;
 }
+
+/**
+ * Get total items from AppPager "X-Y of Z items" text
+ * @param window - Playwright page
+ * @returns Total item count, or null if pager not found
+ */
+export async function getPagerTotal(window: Page): Promise<number | null> {
+  const pagerText = await window.locator('.pager-shown-items').textContent().catch(() => null);
+  if (!pagerText) return null;
+  // Parse "1-50 of 200 items" → 200
+  const match = pagerText.match(/of\s+(\d+)\s+items/);
+  return match ? parseInt(match[1], 10) : null;
+}

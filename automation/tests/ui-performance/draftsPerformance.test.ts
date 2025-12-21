@@ -18,9 +18,11 @@ import {
   waitForRowCount,
   setPageSize,
   formatDuration,
+  getPagerTotal,
 } from './performanceUtils.js';
 
 const DB_ITEM_COUNT = 100; // Items seeded to DB
+const REQUIRED_TOTAL = 100; // Minimum items expected from seeding
 const PAGE_SIZE = 50; // Max items per page in UI
 const DRAFT_ROW_SELECTOR = '[data-testid^="button-draft-continue-"]'; // One per row
 
@@ -63,6 +65,13 @@ test.describe('Drafts Page Performance', () => {
 
     // Try to set page size (may not have pager in local mode)
     await setPageSize(window, PAGE_SIZE);
+
+    // Validate pager shows sufficient total items (volume enforcement)
+    const pagerTotal = await getPagerTotal(window);
+    if (pagerTotal !== null) {
+      expect(pagerTotal, `Pager shows only ${pagerTotal} items, need >= ${REQUIRED_TOTAL}`).toBeGreaterThanOrEqual(REQUIRED_TOTAL);
+      console.log(`Pager total: ${pagerTotal} items`);
+    }
 
     // Collect multiple samples for p95
     const samples = await collectPerformanceSamples(async () => {
