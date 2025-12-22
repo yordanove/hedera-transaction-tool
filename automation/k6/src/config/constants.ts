@@ -22,11 +22,12 @@ export const DATA_VOLUMES = {
   SIGN_ALL_TRANSACTIONS: 200, // Requires 2 pages
   READY_TO_SIGN: 200, // Requires 2 pages
   DRAFTS: 100,
-  READY_FOR_REVIEW: 100,
+  READY_FOR_REVIEW: 100, // Also used for approve transactions
   CONTACTS: 100,
   ACCOUNTS: 100,
   FILES: 100,
   HISTORY: 500, // Requires 5 pages
+  GROUP_SIZE: 100, // Transactions per group for Sign All testing
 };
 
 /**
@@ -70,4 +71,12 @@ export const PAGINATION = {
 export const TEST_CREDENTIALS = {
   EMAIL: 'k6perf@test.com',
   PASSWORD: 'Password123',
+} as const;
+
+/**
+ * Signature modes for sign-all tests
+ */
+export const SIGNATURE_MODES = {
+  PRE_SIGNED_BATCH: 'PRE_SIGNED_BATCH',
+  API_ONLY: 'API_ONLY',
 } as const;

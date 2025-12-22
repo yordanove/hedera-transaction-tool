@@ -14,18 +14,7 @@
 import fs from 'fs';
 import path from 'path';
 import { Transaction, PrivateKey } from '@hashgraph/sdk';
-
-/**
- * Signature map format expected by backend
- * Structure: nodeAccountId -> transactionId -> publicKey -> signature (hex)
- */
-interface SignatureMap {
-  [nodeAccountId: string]: {
-    [transactionId: string]: {
-      [publicKey: string]: string;
-    };
-  };
-}
+import type { SignatureMap } from '../src/types/api.types.js';
 
 /** Input for signing multiple transactions */
 interface TransactionInput {

@@ -16,7 +16,7 @@ import { Trend, Counter, Rate } from 'k6/metrics';
 import { authHeaders, formatDuration } from '../lib/helpers';
 import { standardSetup } from '../lib/setup';
 import { getBaseUrlWithFallback } from '../config/credentials';
-import { DATA_VOLUMES, THRESHOLDS, HTTP_STATUS, PAGINATION } from '../config/constants';
+import { DATA_VOLUMES, THRESHOLDS, HTTP_STATUS, PAGINATION, SIGNATURE_MODES } from '../config/constants';
 import type {
   K6Options,
   SetupData,
@@ -282,7 +282,7 @@ export default function (data: SetupData): void {
     let mode: string;
 
     if (preSignedData) {
-      mode = 'PRE_SIGNED_BATCH';
+      mode = SIGNATURE_MODES.PRE_SIGNED_BATCH;
       const payloads = buildSignaturePayloads(transactions, preSignedData, txCount);
 
       if (payloads.length < txCount) {
@@ -294,7 +294,7 @@ export default function (data: SetupData): void {
 
       result = submitBatchSignatures(payloads, headers);
     } else {
-      mode = 'API_ONLY';
+      mode = SIGNATURE_MODES.API_ONLY;
       result = measureApiOnly(transactions, headers, txCount);
     }
 

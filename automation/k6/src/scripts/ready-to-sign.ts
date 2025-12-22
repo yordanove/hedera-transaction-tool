@@ -6,21 +6,20 @@
  * - 100+ concurrent users
  */
 
-import http from 'k6/http';
 import { check, sleep, group } from 'k6';
 import { Trend, Rate } from 'k6/metrics';
 import { authHeaders, formatDuration } from '../lib/helpers';
 import { multiUserSetup, getTokenForVU } from '../lib/setup';
 import { formatDataMetrics, needed_properties, textSummary } from '../lib/utils';
+import { fetchPaginated } from '../lib/pagination';
 import { getBaseUrlWithFallback } from '../config/credentials';
-import { DATA_VOLUMES, THRESHOLDS, DELAYS, HTTP_STATUS, PAGINATION } from '../config/constants';
+import { DATA_VOLUMES, THRESHOLDS, DELAYS } from '../config/constants';
 import { STANDARD_LOAD_STAGES, TAB_LOAD_THRESHOLDS } from '../config/load-profiles';
 import type {
   K6Options,
   MultiUserSetupData,
   SummaryData,
   SummaryOutput,
-  PaginatedResponse,
   TransactionToSignDto,
 } from '../types';
 
@@ -69,49 +68,28 @@ export default function (data: MultiUserSetupData): void {
   if (!token) return;
 
   const headers = authHeaders(token);
+  const targetCount = DATA_VOLUMES.READY_TO_SIGN; // 200
 
   group('Ready to Sign Page', () => {
-    const startTime = Date.now();
-    let totalItems = 0;
-    const targetCount = DATA_VOLUMES.READY_TO_SIGN; // 200
-    const pagesNeeded = Math.ceil(targetCount / PAGINATION.MAX_SIZE); // 2
+    const result = fetchPaginated<TransactionToSignDto>({
+      buildUrl: (page, size) => `${BASE_URL}/transactions/sign?page=${page}&size=${size}`,
+      headers,
+      targetCount,
+      tagName: 'ready-to-sign',
+      checkName: 'ready-to-sign',
+    });
 
-    for (let page = 1; page <= pagesNeeded; page++) {
-      const res = http.get(
-        `${BASE_URL}/transactions/sign?page=${page}&size=${PAGINATION.MAX_SIZE}`,
-        { ...headers, tags: { name: 'ready-to-sign' } },
-      );
-
-      check(res, {
-        [`ready-to-sign page ${page} status 200`]: (r) => r.status === HTTP_STATUS.OK,
-      });
-
-      if (res.status !== HTTP_STATUS.OK) {
-        break;
-      }
-
-      try {
-        const body = JSON.parse(res.body as string) as PaginatedResponse<TransactionToSignDto>;
-        totalItems += body.items.length;
-
-        // Stop if no more data
-        if (body.items.length < PAGINATION.MAX_SIZE) break;
-      } catch {
-        break;
-      }
-    }
-
-    const totalDuration = Date.now() - startTime;
-    totalDurationTrend.add(totalDuration);
-    dataVolumeOk.add(totalItems >= targetCount);
+    // Record metrics
+    totalDurationTrend.add(result.totalDuration);
+    dataVolumeOk.add(result.totalItems >= targetCount);
 
     check(null, {
-      'ready-to-sign total time < 1s': () => totalDuration < THRESHOLDS.PAGE_LOAD_MS,
-      [`fetched ${targetCount}+ items`]: () => totalItems >= targetCount,
+      'ready-to-sign total time < 1s': () => result.totalDuration < THRESHOLDS.PAGE_LOAD_MS,
+      [`fetched ${targetCount}+ items`]: () => result.totalItems >= targetCount,
     });
 
     if (DEBUG)
-      console.log(`Ready to Sign: ${totalItems} items in ${formatDuration(totalDuration)}`);
+      console.log(`Ready to Sign: ${result.totalItems} items in ${formatDuration(result.totalDuration)}`);
   });
 
   sleep(DELAYS.BETWEEN_ITERATIONS);

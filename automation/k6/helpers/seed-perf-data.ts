@@ -29,6 +29,8 @@ import {
   Timestamp,
   Transaction,
 } from '@hashgraph/sdk';
+import { DATA_VOLUMES } from '../src/config/constants.js';
+import type { SignatureMap } from '../src/types/api.types.js';
 
 // ESM compatibility for __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -43,11 +45,11 @@ let testPublicKeyHex: string;
 let testMnemonic: Mnemonic;
 let testMnemonicHash: string;
 
-// Data volume requirements
-const SIGN_COUNT = 200;
-const HISTORY_COUNT = 500;
-const APPROVE_COUNT = 100;
-const GROUP_SIZE = 100;  // Transactions per group for Sign All testing (requirement: 100)
+// Data volume requirements - imported from single source of truth
+const SIGN_COUNT = DATA_VOLUMES.READY_TO_SIGN;
+const HISTORY_COUNT = DATA_VOLUMES.HISTORY;
+const APPROVE_COUNT = DATA_VOLUMES.READY_FOR_REVIEW;
+const GROUP_SIZE = DATA_VOLUMES.GROUP_SIZE;
 
 interface UserRow {
   id: number;
@@ -235,14 +237,36 @@ function createFileCreateTransaction(index: number): {
   };
 }
 
+interface InsertTransactionOptions {
+  client: Client;
+  index: number;
+  status: string;
+  creatorKeyId: number;
+  executedAt?: Date | null;
+  useRealTx?: boolean;
+  name?: string;
+  descriptionSuffix?: string;
+}
+
+interface InsertTransactionResult {
+  id: number;
+  signData?: SignTransactionData;
+}
+
 async function insertTransaction(
-  client: Client,
-  index: number,
-  status: string,
-  creatorKeyId: number,
-  executedAt: Date | null = null,
-  useRealTx: boolean = false,
-): Promise<number> {
+  options: InsertTransactionOptions,
+): Promise<InsertTransactionResult> {
+  const {
+    client,
+    index,
+    status,
+    creatorKeyId,
+    executedAt = null,
+    useRealTx = false,
+    name = `Perf Test ${index}`,
+    descriptionSuffix = `${index}`,
+  } = options;
+
   let transactionBytes: Buffer;
   let unsignedTransactionBytes: Buffer;
   let transactionId: string;
@@ -279,9 +303,9 @@ async function insertTransaction(
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
      RETURNING id`,
     [
-      `Perf Test ${index}`,
+      name,
       'FILE CREATE',
-      `${SEED_MARKER}-${Date.now()}-${index}`,
+      `${SEED_MARKER}-${Date.now()}-${descriptionSuffix}`,
       transactionId,
       transactionHash,
       transactionBytes,
@@ -296,7 +320,17 @@ async function insertTransaction(
     ],
   );
 
-  return result.rows[0].id;
+  const insertResult: InsertTransactionResult = { id: result.rows[0].id };
+
+  // Return transaction data for signature generation when using real transactions
+  if (useRealTx) {
+    insertResult.signData = {
+      transactionId,
+      unsignedBytes: unsignedTransactionBytes,
+    };
+  }
+
+  return insertResult;
 }
 
 async function seedSignTransactions(
@@ -310,41 +344,18 @@ async function seedSignTransactions(
   signTransactionsData.length = 0;
 
   for (let i = 0; i < SIGN_COUNT; i++) {
-    // Create the transaction data first so we can collect it
-    const txData = createFileCreateTransaction(i);
-
-    // Insert into database
-    await client.query(
-      `INSERT INTO "transaction" (
-         name, type, description, "transactionId", "transactionHash",
-         "transactionBytes", "unsignedTransactionBytes", status,
-         "creatorKeyId", signature, "validStart", "mirrorNetwork",
-         "isManual", "executedAt", "createdAt", "updatedAt"
-       )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())`,
-      [
-        `Perf Test ${i}`,
-        'FILE CREATE',
-        `${SEED_MARKER}-${Date.now()}-${i}`,
-        txData.transactionId,
-        txData.transactionHash,
-        txData.transactionBytes,
-        txData.unsignedTransactionBytes,
-        'WAITING FOR SIGNATURES',
-        userKeyId,
-        txData.signature,
-        txData.validStart,
-        'mainnet',
-        false,
-        null,
-      ],
-    );
+    const result = await insertTransaction({
+      client,
+      index: i,
+      status: 'WAITING FOR SIGNATURES',
+      creatorKeyId: userKeyId,
+      useRealTx: true,
+    });
 
     // Collect for signature generation
-    signTransactionsData.push({
-      transactionId: txData.transactionId,
-      unsignedBytes: txData.unsignedTransactionBytes,
-    });
+    if (result.signData) {
+      signTransactionsData.push(result.signData);
+    }
 
     // NOTE: transaction_signer rows are NOT needed for /transactions/sign
     // The endpoint uses required keys from transaction bytes + user_key matching
@@ -367,14 +378,14 @@ async function seedHistoryTransactions(
     const status = HISTORY_STATUSES[i % HISTORY_STATUSES.length];
     const executedAt = status === 'EXECUTED' ? new Date() : null;
 
-    await insertTransaction(
+    await insertTransaction({
       client,
-      SIGN_COUNT + i,  // Offset index to avoid transactionId collisions
+      index: SIGN_COUNT + i, // Offset to avoid transactionId collisions
       status,
-      userKeyId,
+      creatorKeyId: userKeyId,
       executedAt,
-      true,  // useRealTx - dummy bytes cause "invalid wire type" protobuf errors
-    );
+      useRealTx: true, // Dummy bytes cause "invalid wire type" protobuf errors
+    });
 
     if ((i + 1) % 100 === 0) {
       console.log(`  Created ${i + 1}/${HISTORY_COUNT} history transactions`);
@@ -393,44 +404,18 @@ async function seedApproveTransactions(
   console.log('  (Using real Hedera SDK transactions)');
 
   for (let i = 0; i < APPROVE_COUNT; i++) {
-    // Create the transaction data first so we can collect it for signatures
-    const txData = createFileCreateTransaction(SIGN_COUNT + HISTORY_COUNT + i);
-
-    // Insert into database
-    const result: QueryResult<TransactionRow> = await client.query(
-      `INSERT INTO "transaction" (
-         name, type, description, "transactionId", "transactionHash",
-         "transactionBytes", "unsignedTransactionBytes", status,
-         "creatorKeyId", signature, "validStart", "mirrorNetwork",
-         "isManual", "executedAt", "createdAt", "updatedAt"
-       )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
-       RETURNING id`,
-      [
-        `Perf Test ${SIGN_COUNT + HISTORY_COUNT + i}`,
-        'FILE CREATE',
-        `${SEED_MARKER}-${Date.now()}-${SIGN_COUNT + HISTORY_COUNT + i}`,
-        txData.transactionId,
-        txData.transactionHash,
-        txData.transactionBytes,
-        txData.unsignedTransactionBytes,
-        'WAITING FOR SIGNATURES',
-        userKeyId,
-        txData.signature,
-        txData.validStart,
-        'mainnet',
-        false,
-        null,
-      ],
-    );
-
-    const txId = result.rows[0].id;
+    const result = await insertTransaction({
+      client,
+      index: SIGN_COUNT + HISTORY_COUNT + i,
+      status: 'WAITING FOR SIGNATURES',
+      creatorKeyId: userKeyId,
+      useRealTx: true,
+    });
 
     // Collect for signature generation (approve transactions also appear in /transactions/sign)
-    signTransactionsData.push({
-      transactionId: txData.transactionId,
-      unsignedBytes: txData.unsignedTransactionBytes,
-    });
+    if (result.signData) {
+      signTransactionsData.push(result.signData);
+    }
 
     // Create transaction_approver entry with approved = NULL
     await client.query(
@@ -438,7 +423,7 @@ async function seedApproveTransactions(
          "transactionId", "userId", approved, "createdAt", "updatedAt"
        )
        VALUES ($1, $2, NULL, NOW(), NOW())`,
-      [txId, userId],
+      [result.id, userId],
     );
 
     if ((i + 1) % 25 === 0) {
@@ -465,7 +450,7 @@ async function seedTransactionGroups(
   console.log('  (Using real Hedera SDK transactions)');
 
   // Calculate offset to avoid ID collisions with other seeded transactions
-  const offset = SIGN_COUNT + HISTORY_COUNT + APPROVE_COUNT;
+  const indexOffset = SIGN_COUNT + HISTORY_COUNT + APPROVE_COUNT;
 
   // 1. Create the transaction group
   const groupResult: QueryResult<GroupRow> = await client.query(
@@ -481,42 +466,22 @@ async function seedTransactionGroups(
   const transactionIds: number[] = [];
 
   for (let i = 0; i < GROUP_SIZE; i++) {
-    const txData = createFileCreateTransaction(offset + i);
+    const result = await insertTransaction({
+      client,
+      index: indexOffset + i,
+      status: 'WAITING FOR SIGNATURES',
+      creatorKeyId: userKeyId,
+      useRealTx: true,
+      name: `Group Tx ${i + 1}`,
+      descriptionSuffix: `group-item-${i}`,
+    });
 
-    const result: QueryResult<TransactionRow> = await client.query(
-      `INSERT INTO "transaction" (
-         name, type, description, "transactionId", "transactionHash",
-         "transactionBytes", "unsignedTransactionBytes", status,
-         "creatorKeyId", signature, "validStart", "mirrorNetwork",
-         "isManual", "executedAt", "createdAt", "updatedAt"
-       )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
-       RETURNING id`,
-      [
-        `Group Tx ${i + 1}`,
-        'FILE CREATE',
-        `${SEED_MARKER}-group-item-${Date.now()}-${i}`,
-        txData.transactionId,
-        txData.transactionHash,
-        txData.transactionBytes,
-        txData.unsignedTransactionBytes,
-        'WAITING FOR SIGNATURES',
-        userKeyId,
-        txData.signature,
-        txData.validStart,
-        'mainnet',
-        false,
-        null,
-      ],
-    );
-
-    transactionIds.push(result.rows[0].id);
+    transactionIds.push(result.id);
 
     // Collect for signature generation (group transactions also need signing)
-    signTransactionsData.push({
-      transactionId: txData.transactionId,
-      unsignedBytes: txData.unsignedTransactionBytes,
-    });
+    if (result.signData) {
+      signTransactionsData.push(result.signData);
+    }
   }
 
   // 3. Link transactions to group via transaction_group_item
@@ -531,14 +496,12 @@ async function seedTransactionGroups(
   console.log(`  Completed: 1 group with ${GROUP_SIZE} transactions (IDs: ${transactionIds[0]}-${transactionIds[transactionIds.length - 1]})`);
 }
 
-// Backend expects: { nodeAccountId: { transactionId: { derPublicKey: "0x" + signatureHex }}}
-type BackendSignatureMap = Record<string, Record<string, Record<string, string>>>;
-
 /**
  * Convert SDK SignatureMap to backend JSON format using public iterators
+ * Backend expects: { nodeAccountId: { transactionId: { derPublicKey: "0x" + signatureHex }}}
  */
-function signatureMapToBackendFormat(signatureMap: Iterable<[unknown, unknown]>): BackendSignatureMap {
-  const result: BackendSignatureMap = {};
+function signatureMapToBackendFormat(signatureMap: Iterable<[unknown, unknown]>): SignatureMap {
+  const result: SignatureMap = {};
 
   for (const [nodeAccountId, nodeMap] of signatureMap) {
     const nodeId = String(nodeAccountId);
@@ -568,7 +531,7 @@ function generateSignaturesFile(): void {
 
   console.log(`\nGenerating signatures for ${signTransactionsData.length} transactions...`);
 
-  const signaturesByTxId: Record<string, BackendSignatureMap> = {};
+  const signaturesByTxId: Record<string, SignatureMap> = {};
 
   for (const { transactionId, unsignedBytes } of signTransactionsData) {
     const tx = Transaction.fromBytes(unsignedBytes);
@@ -613,6 +576,60 @@ function savePrivateKey(): void {
   const mnemonicPath = path.join(dataDir, 'test-mnemonic.txt');
   fs.writeFileSync(mnemonicPath, testMnemonic.toString());
   console.log(`  Saved mnemonic to: ${mnemonicPath}`);
+}
+
+interface CountRow {
+  count: string;
+}
+
+/**
+ * Validate that seeded data matches expected volumes
+ * Helps catch partial failures and volume mismatches
+ */
+async function validateSeededData(client: Client): Promise<void> {
+  console.log('\nValidating seeded data...');
+
+  const checks: Array<{ name: string; query: string; expected: number }> = [
+    {
+      name: 'Sign transactions',
+      query: `SELECT COUNT(*) as count FROM "transaction" WHERE description LIKE '${SEED_MARKER}%' AND status = 'WAITING FOR SIGNATURES' AND description NOT LIKE '${SEED_MARKER}-group%'`,
+      expected: SIGN_COUNT + APPROVE_COUNT, // Both types are WAITING FOR SIGNATURES
+    },
+    {
+      name: 'History transactions',
+      query: `SELECT COUNT(*) as count FROM "transaction" WHERE description LIKE '${SEED_MARKER}%' AND status IN ('EXECUTED', 'FAILED', 'EXPIRED', 'CANCELED', 'ARCHIVED')`,
+      expected: HISTORY_COUNT,
+    },
+    {
+      name: 'Approve transactions',
+      query: `SELECT COUNT(*) as count FROM transaction_approver WHERE "transactionId" IN (SELECT id FROM "transaction" WHERE description LIKE '${SEED_MARKER}%')`,
+      expected: APPROVE_COUNT,
+    },
+    {
+      name: 'Group transactions',
+      query: `SELECT COUNT(*) as count FROM "transaction" WHERE description LIKE '${SEED_MARKER}%-group-item%'`,
+      expected: GROUP_SIZE,
+    },
+    {
+      name: 'Transaction groups',
+      query: `SELECT COUNT(*) as count FROM transaction_group WHERE description LIKE '${SEED_MARKER}%'`,
+      expected: 1,
+    },
+  ];
+
+  let allPassed = true;
+  for (const { name, query, expected } of checks) {
+    const result: QueryResult<CountRow> = await client.query(query);
+    const actual = parseInt(result.rows[0].count);
+    const passed = actual >= expected;
+    const status = passed ? '✓' : '✗';
+    console.log(`  ${status} ${name}: ${actual}/${expected}`);
+    if (!passed) allPassed = false;
+  }
+
+  if (!allPassed) {
+    console.warn('\n⚠️  Some volume checks failed. Tests may not have enough data.');
+  }
 }
 
 async function seedData(): Promise<void> {
@@ -668,6 +685,9 @@ async function seedData(): Promise<void> {
 
     // Save private key for debugging/manual signing
     savePrivateKey();
+
+    // Validate seeded data
+    await validateSeededData(client);
 
     // Summary
     const total = SIGN_COUNT + HISTORY_COUNT + APPROVE_COUNT + GROUP_SIZE;
