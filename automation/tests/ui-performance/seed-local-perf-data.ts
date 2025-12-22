@@ -11,8 +11,10 @@
 import sqlite3 from 'sqlite3';
 import crypto from 'crypto';
 import { getDatabasePath } from '../../utils/databaseUtil.js';
+import { DATA_VOLUMES } from '../../k6/src/config/constants.js';
 
-const TARGET_COUNT = 100;
+// Use DATA_VOLUMES for SSOT - drafts/accounts/files all share same count
+const TARGET_COUNT = DATA_VOLUMES.DRAFTS;
 
 interface SeedResult {
   drafts: number;

@@ -21,6 +21,7 @@ import {
   getPagerTotal,
   PAGE_SIZE,
   DATA_VOLUMES,
+  DEBUG,
 } from './performanceUtils.js';
 import { SELECTORS } from './selectors.js';
 
@@ -49,7 +50,7 @@ test.describe('Drafts Page Performance', () => {
     // Seed test data
     const result = await seedLocalPerfData(testEmail);
     seededCount = result.drafts;
-    console.log(`Seeded ${seededCount} drafts for performance test`);
+    if (DEBUG) console.log(`Seeded ${seededCount} drafts for performance test`);
   });
 
   test.afterAll(async () => {

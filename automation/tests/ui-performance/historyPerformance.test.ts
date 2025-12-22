@@ -83,7 +83,7 @@ test.describe('History Performance (Org Mode)', () => {
     const pagerTotal = await getPagerTotal(window);
     expect(pagerTotal, 'Pager not found - volume enforcement failed').not.toBeNull();
     expect(pagerTotal!, `Pager shows only ${pagerTotal} items, need >= ${REQUIRED_TOTAL}`).toBeGreaterThanOrEqual(REQUIRED_TOTAL);
-    console.log(`Pager total: ${pagerTotal} items`);
+    if (DEBUG) console.log(`Pager total: ${pagerTotal} items`);
 
     // Verify data is visible before measuring
     const initialRowCount = await waitForRowCount(window, TRANSACTION_ROW_SELECTOR, 1, 5000);

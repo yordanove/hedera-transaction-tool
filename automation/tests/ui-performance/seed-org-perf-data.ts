@@ -71,7 +71,7 @@ export async function seedOrgPerfData(): Promise<SeedResult> {
   const automationDir = path.resolve(__dirname, '../..');
   const mnemonicPath = path.join(__dirname, '../../k6/data/test-mnemonic.txt');
 
-  console.log('Seeding org-mode performance test data...');
+  if (DEBUG) console.log('Seeding org-mode performance test data...');
 
   try {
     // Step 0: Flush rate limiter to prevent "too many requests" errors
@@ -105,7 +105,7 @@ export async function seedOrgPerfData(): Promise<SeedResult> {
       throw new Error(`Mnemonic file not found at ${mnemonicPath}`);
     }
 
-    console.log('  Org-mode data seeding complete!');
+    if (DEBUG) console.log('  Org-mode data seeding complete!');
 
     return {
       userCreated: true,
@@ -183,7 +183,7 @@ export async function importSeedMnemonic(
 
   // Click final Next button with retry
   await registrationPage.clickOnFinalNextButtonWithRetry();
-  console.log('Account Setup completed');
+  if (DEBUG) console.log('Account Setup completed');
 }
 
 /**

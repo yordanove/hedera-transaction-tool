@@ -18,6 +18,7 @@ import {
   waitForRowCount,
   formatDuration,
   DATA_VOLUMES,
+  DEBUG,
 } from './performanceUtils.js';
 
 // Volume requirement from k6 constants (SSOT)
@@ -45,7 +46,7 @@ test.describe('Accounts Page Performance', () => {
     // Seed test data
     const result = await seedLocalPerfData(testEmail);
     seededCount = result.accounts;
-    console.log(`Seeded ${seededCount} accounts for performance test`);
+    if (DEBUG) console.log(`Seeded ${seededCount} accounts for performance test`);
   });
 
   test.afterAll(async () => {
