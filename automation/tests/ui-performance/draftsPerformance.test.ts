@@ -21,8 +21,8 @@ import {
   getPagerTotal,
   PAGE_SIZE,
   DATA_VOLUMES,
-  SELECTORS,
 } from './performanceUtils.js';
+import { SELECTORS } from './selectors.js';
 
 // Volume requirement from k6 constants (SSOT)
 const DB_ITEM_COUNT = DATA_VOLUMES.DRAFTS;

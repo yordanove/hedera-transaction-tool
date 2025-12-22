@@ -29,8 +29,8 @@ import {
   TRANSACTION_ROW_SELECTOR,
   DATA_VOLUMES,
   DEBUG,
-  SELECTORS,
 } from './performanceUtils.js';
+import { SELECTORS } from './selectors.js';
 import { setupOrgModeTestEnvironment } from './seed-org-perf-data.js';
 
 dotenv.config();

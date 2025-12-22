@@ -31,8 +31,8 @@ import {
   DATA_VOLUMES,
   THRESHOLDS,
   DEBUG,
-  SELECTORS,
 } from './performanceUtils.js';
+import { SELECTORS } from './selectors.js';
 import { setupOrgModeTestEnvironment } from './seed-org-perf-data.js';
 
 dotenv.config();
