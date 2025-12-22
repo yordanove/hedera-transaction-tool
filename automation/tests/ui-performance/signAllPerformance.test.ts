@@ -31,6 +31,7 @@ import {
   DATA_VOLUMES,
   THRESHOLDS,
   DEBUG,
+  SELECTORS,
 } from './performanceUtils.js';
 import { setupOrgModeTestEnvironment } from './seed-org-perf-data.js';
 
@@ -63,9 +64,9 @@ test.describe('Sign All Performance (Org Mode)', () => {
 
   test('Sign All should complete in under 4 seconds', async () => {
     // Navigate to Transactions > Ready to Sign
-    await window.click('[data-testid="button-menu-transactions"]');
+    await window.click(SELECTORS.MENU_TRANSACTIONS);
     await window.waitForLoadState('networkidle');
-    await window.click('text=Ready to Sign');
+    await window.click(SELECTORS.TAB_READY_TO_SIGN);
 
     // Wait for the transaction API response
     await window.waitForResponse(

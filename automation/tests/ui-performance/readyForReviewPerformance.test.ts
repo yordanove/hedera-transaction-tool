@@ -26,6 +26,7 @@ import {
   TRANSACTION_ROW_SELECTOR,
   DATA_VOLUMES,
   DEBUG,
+  SELECTORS,
 } from './performanceUtils.js';
 import { setupOrgModeTestEnvironment } from './seed-org-perf-data.js';
 
@@ -57,7 +58,7 @@ test.describe('Ready for Review Performance (Org Mode)', () => {
 
   test('Ready for Review tab should load in under 1 second (p95)', async () => {
     // Navigate to Transactions page and Ready for Review first
-    await window.click('[data-testid="button-menu-transactions"]');
+    await window.click(SELECTORS.MENU_TRANSACTIONS);
     await window.waitForLoadState('networkidle');
     await Promise.all([
       window.waitForResponse(
@@ -66,7 +67,7 @@ test.describe('Ready for Review Performance (Org Mode)', () => {
           res.url().includes('/transactions/approve'),
         { timeout: 10000 }
       ),
-      window.click('text=Ready for Review'),
+      window.click(SELECTORS.TAB_READY_FOR_REVIEW),
     ]);
     await window.waitForLoadState('networkidle');
 
@@ -87,12 +88,12 @@ test.describe('Ready for Review Performance (Org Mode)', () => {
     // Collect multiple samples for p95
     const samples = await collectPerformanceSamples(async () => {
       // Navigate away first
-      await window.click('text=History');
+      await window.click(SELECTORS.TAB_HISTORY);
       await window.waitForLoadState('networkidle');
 
       // Measure page load time
       const startTime = Date.now();
-      await window.click('text=Ready for Review');
+      await window.click(SELECTORS.TAB_READY_FOR_REVIEW);
       await window.waitForLoadState('networkidle');
       const loadTime = Date.now() - startTime;
 

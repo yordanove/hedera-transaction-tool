@@ -21,6 +21,7 @@ import {
   getPagerTotal,
   PAGE_SIZE,
   DATA_VOLUMES,
+  SELECTORS,
 } from './performanceUtils.js';
 
 // Volume requirement from k6 constants (SSOT)
@@ -62,9 +63,9 @@ test.describe('Drafts Page Performance', () => {
 
   test('Drafts tab should load in under 1 second (p95)', async () => {
     // Navigate to Transactions page and Drafts tab first
-    await window.click('[data-testid="button-menu-transactions"]');
+    await window.click(SELECTORS.MENU_TRANSACTIONS);
     await window.waitForLoadState('networkidle');
-    await window.click('text=Drafts');
+    await window.click(SELECTORS.TAB_DRAFTS);
     await window.waitForLoadState('networkidle');
 
     // Try to set page size
@@ -81,12 +82,12 @@ test.describe('Drafts Page Performance', () => {
     // Collect multiple samples for p95
     const samples = await collectPerformanceSamples(async () => {
       // Navigate away first
-      await window.click('text=History');
+      await window.click(SELECTORS.TAB_HISTORY);
       await window.waitForLoadState('networkidle');
 
       // Navigate to Drafts and measure load time
       const startTime = Date.now();
-      await window.click('text=Drafts');
+      await window.click(SELECTORS.TAB_DRAFTS);
       await window.waitForLoadState('networkidle');
       const loadTime = Date.now() - startTime;
 

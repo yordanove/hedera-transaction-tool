@@ -29,6 +29,7 @@ import {
   TRANSACTION_ROW_SELECTOR,
   DATA_VOLUMES,
   DEBUG,
+  SELECTORS,
 } from './performanceUtils.js';
 import { setupOrgModeTestEnvironment } from './seed-org-perf-data.js';
 
@@ -60,7 +61,7 @@ test.describe('History Performance (Org Mode)', () => {
 
   test('History tab should load in under 1 second (p95)', async () => {
     // Navigate to Transactions page and History first
-    await window.click('[data-testid="button-menu-transactions"]');
+    await window.click(SELECTORS.MENU_TRANSACTIONS);
     await window.waitForLoadState('networkidle');
 
     // Click History and wait for its API response
@@ -71,7 +72,7 @@ test.describe('History Performance (Org Mode)', () => {
         (res) => res.url().includes('localhost:3001') && res.url().includes('transaction'),
         { timeout: 10000 }
       ),
-      window.click('text=History'),
+      window.click(SELECTORS.TAB_HISTORY),
     ]);
     await window.waitForLoadState('networkidle');
 
@@ -92,12 +93,12 @@ test.describe('History Performance (Org Mode)', () => {
     // Collect multiple samples for p95
     const samples = await collectPerformanceSamples(async () => {
       // Navigate away first
-      await window.click('text=Ready to Sign');
+      await window.click(SELECTORS.TAB_READY_TO_SIGN);
       await window.waitForLoadState('networkidle');
 
       // Measure page load time
       const startTime = Date.now();
-      await window.click('text=History');
+      await window.click(SELECTORS.TAB_HISTORY);
       await window.waitForLoadState('networkidle');
       const loadTime = Date.now() - startTime;
 

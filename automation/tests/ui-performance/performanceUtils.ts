@@ -19,6 +19,23 @@ export const PAGE_SIZE = 50; // Max visible items per page in UI
 export const ROW_WAIT_TIMEOUT_MS = 5000; // Default timeout for waitForRowCount
 export const TRANSACTION_ROW_SELECTOR = '.table-custom tbody tr'; // Transaction table rows
 
+// Centralized selectors (SSOT for UI perf tests)
+// NOTE: Text/class selectors are fragile - frontend should add data-testid attributes
+export const SELECTORS = {
+  // Menu buttons (using data-testid - good)
+  MENU_TRANSACTIONS: '[data-testid="button-menu-transactions"]',
+
+  // Transaction tabs (text-based - fragile, needs frontend data-testid)
+  TAB_HISTORY: 'text=History',
+  TAB_READY_TO_SIGN: 'text=Ready to Sign',
+  TAB_READY_FOR_REVIEW: 'text=Ready for Review',
+  TAB_DRAFTS: 'text=Drafts',
+
+  // Pager elements (class-based - fragile, needs frontend data-testid)
+  PAGER_SELECT: '.pager-per-page select',
+  PAGER_ITEMS: '.pager-shown-items',
+};
+
 export interface PerformanceSamples {
   avg: number;
   min: number;

@@ -26,6 +26,7 @@ import {
   TRANSACTION_ROW_SELECTOR,
   DATA_VOLUMES,
   DEBUG,
+  SELECTORS,
 } from './performanceUtils.js';
 import { setupOrgModeTestEnvironment } from './seed-org-perf-data.js';
 
@@ -57,9 +58,9 @@ test.describe('Ready to Sign Performance (Org Mode)', () => {
 
   test('Ready to Sign tab should load in under 1 second (p95)', async () => {
     // Navigate to Transactions page and Ready to Sign first
-    await window.click('[data-testid="button-menu-transactions"]');
+    await window.click(SELECTORS.MENU_TRANSACTIONS);
     await window.waitForLoadState('networkidle');
-    await window.click('text=Ready to Sign');
+    await window.click(SELECTORS.TAB_READY_TO_SIGN);
 
     // Wait for the transaction API response (not just networkidle)
     // This is critical - the page may render before API data arrives
@@ -86,12 +87,12 @@ test.describe('Ready to Sign Performance (Org Mode)', () => {
     // Collect multiple samples for p95
     const samples = await collectPerformanceSamples(async () => {
       // Navigate away first
-      await window.click('text=History');
+      await window.click(SELECTORS.TAB_HISTORY);
       await window.waitForLoadState('networkidle');
 
       // Measure page load time
       const startTime = Date.now();
-      await window.click('text=Ready to Sign');
+      await window.click(SELECTORS.TAB_READY_TO_SIGN);
       await window.waitForLoadState('networkidle');
       const loadTime = Date.now() - startTime;
 
