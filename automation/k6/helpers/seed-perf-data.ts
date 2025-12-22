@@ -589,37 +589,42 @@ interface CountRow {
 async function validateSeededData(client: Client): Promise<void> {
   console.log('\nValidating seeded data...');
 
-  const checks: Array<{ name: string; query: string; expected: number }> = [
+  const checks: Array<{ name: string; query: string; params: string[]; expected: number }> = [
     {
       name: 'Sign transactions',
-      query: `SELECT COUNT(*) as count FROM "transaction" WHERE description LIKE '${SEED_MARKER}%' AND status = 'WAITING FOR SIGNATURES' AND description NOT LIKE '${SEED_MARKER}-group%'`,
+      query: `SELECT COUNT(*) as count FROM "transaction" WHERE description LIKE $1 AND status = 'WAITING FOR SIGNATURES' AND description NOT LIKE $2`,
+      params: [`${SEED_MARKER}%`, `${SEED_MARKER}-group%`],
       expected: SIGN_COUNT + APPROVE_COUNT, // Both types are WAITING FOR SIGNATURES
     },
     {
       name: 'History transactions',
-      query: `SELECT COUNT(*) as count FROM "transaction" WHERE description LIKE '${SEED_MARKER}%' AND status IN ('EXECUTED', 'FAILED', 'EXPIRED', 'CANCELED', 'ARCHIVED')`,
+      query: `SELECT COUNT(*) as count FROM "transaction" WHERE description LIKE $1 AND status IN ('EXECUTED', 'FAILED', 'EXPIRED', 'CANCELED', 'ARCHIVED')`,
+      params: [`${SEED_MARKER}%`],
       expected: HISTORY_COUNT,
     },
     {
       name: 'Approve transactions',
-      query: `SELECT COUNT(*) as count FROM transaction_approver WHERE "transactionId" IN (SELECT id FROM "transaction" WHERE description LIKE '${SEED_MARKER}%')`,
+      query: `SELECT COUNT(*) as count FROM transaction_approver WHERE "transactionId" IN (SELECT id FROM "transaction" WHERE description LIKE $1)`,
+      params: [`${SEED_MARKER}%`],
       expected: APPROVE_COUNT,
     },
     {
       name: 'Group transactions',
-      query: `SELECT COUNT(*) as count FROM "transaction" WHERE description LIKE '${SEED_MARKER}%-group-item%'`,
+      query: `SELECT COUNT(*) as count FROM "transaction" WHERE description LIKE $1`,
+      params: [`${SEED_MARKER}%-group-item%`],
       expected: GROUP_SIZE,
     },
     {
       name: 'Transaction groups',
-      query: `SELECT COUNT(*) as count FROM transaction_group WHERE description LIKE '${SEED_MARKER}%'`,
+      query: `SELECT COUNT(*) as count FROM transaction_group WHERE description LIKE $1`,
+      params: [`${SEED_MARKER}%`],
       expected: 1,
     },
   ];
 
   let allPassed = true;
-  for (const { name, query, expected } of checks) {
-    const result: QueryResult<CountRow> = await client.query(query);
+  for (const { name, query, params, expected } of checks) {
+    const result: QueryResult<CountRow> = await client.query(query, params);
     const actual = parseInt(result.rows[0].count);
     const passed = actual >= expected;
     const status = passed ? '✓' : '✗';
