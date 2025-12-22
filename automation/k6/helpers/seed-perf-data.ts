@@ -29,15 +29,12 @@ import {
   Timestamp,
   Transaction,
 } from '@hashgraph/sdk';
-import { DATA_VOLUMES } from '../src/config/constants.js';
+import { DATA_VOLUMES, SEED_MARKER } from '../src/config/constants.js';
 import type { SignatureMap } from '../src/types/api.types.js';
 
 // ESM compatibility for __dirname
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// Seed marker for idempotency - used to identify and clean up seeded data
-const SEED_MARKER = 'k6-perf-seed';
 
 // Generated keypair for signing - stored in user_key table
 let testPrivateKey: PrivateKey;

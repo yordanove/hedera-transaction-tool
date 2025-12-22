@@ -80,3 +80,9 @@ export const SIGNATURE_MODES = {
   PRE_SIGNED_BATCH: 'PRE_SIGNED_BATCH',
   API_ONLY: 'API_ONLY',
 } as const;
+
+/**
+ * Seed marker for identifying test data
+ * Used to safely clean up test data without affecting real data
+ */
+export const SEED_MARKER = 'k6-perf-seed';

@@ -17,6 +17,7 @@ import { TEST_CREDENTIALS } from '../../k6/src/config/constants.js';
 import { RegistrationPage } from '../../pages/RegistrationPage.js';
 import { OrganizationPage } from '../../pages/OrganizationPage.js';
 import { DEBUG } from './performanceUtils.js';
+import { isDestructiveAllowed } from '../../utils/databaseUtil.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -35,9 +36,19 @@ interface SeedResult {
  * Flush Redis rate limiter keys for the test user.
  * This prevents "too many requests" errors when running multiple org-mode tests.
  * Backend limits logins to 3/minute per email (ANONYMOUS_MINUTE_LIMIT=3).
+ *
+ * Staging-safe: On non-localhost, skips flush to avoid affecting other users.
  */
 async function flushRateLimiter(): Promise<void> {
   const redisUrl = process.env.REDIS_URL || 'redis://localhost:6380';
+
+  // Check if we're on localhost - if not, skip flush for staging safety
+  const isLocalRedis = redisUrl.includes('localhost') || redisUrl.includes('127.0.0.1');
+  if (!isLocalRedis && !isDestructiveAllowed()) {
+    if (DEBUG) console.log('  Skipping Redis flush (non-localhost, staging-safe mode)');
+    return;
+  }
+
   const redis = createClient({ url: redisUrl });
 
   try {
