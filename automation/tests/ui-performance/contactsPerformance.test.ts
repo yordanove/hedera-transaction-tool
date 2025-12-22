@@ -17,12 +17,14 @@ import {
   collectPerformanceSamples,
   formatDuration,
   waitForRowCount,
+  DATA_VOLUMES,
 } from './performanceUtils.js';
 
 // Load environment variables from .env file
 dotenv.config();
 
-const DB_ITEM_COUNT = 100;
+// Volume requirement from k6 constants (SSOT)
+const DB_ITEM_COUNT = DATA_VOLUMES.CONTACTS;
 const MIN_CONTACTS = 50; // Strict: require at least 50 contacts rendered
 // Contacts are rendered as divs, not table rows
 const CONTACT_ROW_SELECTOR = '.container-multiple-select';

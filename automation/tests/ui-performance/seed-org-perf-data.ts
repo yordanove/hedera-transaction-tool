@@ -12,13 +12,17 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { fileURLToPath } from 'url';
 import { createClient } from 'redis';
+import { Page } from '@playwright/test';
+import { TEST_CREDENTIALS } from '../../k6/src/config/constants.js';
+import { RegistrationPage } from '../../pages/RegistrationPage.js';
+import { OrganizationPage } from '../../pages/OrganizationPage.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// k6 test user credentials
-export const K6_USER_EMAIL = 'k6perf@test.com';
-export const K6_USER_PASSWORD = 'Password123';
+// Re-export credentials for backward compatibility (SSOT: k6 constants)
+export const K6_USER_EMAIL = TEST_CREDENTIALS.EMAIL;
+export const K6_USER_PASSWORD = TEST_CREDENTIALS.PASSWORD;
 
 interface SeedResult {
   userCreated: boolean;
@@ -142,4 +146,78 @@ export function readSeedMnemonic(): string[] {
 export function isOrgDataSeeded(): boolean {
   const mnemonicPath = path.join(__dirname, '../../k6/data/test-mnemonic.txt');
   return fs.existsSync(mnemonicPath);
+}
+
+/**
+ * Import the seed mnemonic via the Recovery Phrase import flow.
+ * Extracts duplicated mnemonic import logic from org-mode tests (DRY).
+ */
+export async function importSeedMnemonic(
+  window: Page,
+  registrationPage: RegistrationPage,
+): Promise<void> {
+  await registrationPage.waitForElementToBeVisible(registrationPage.createNewTabSelector);
+  console.log('Account Setup screen visible, importing seed mnemonic...');
+
+  const words = readSeedMnemonic();
+  console.log(`Read mnemonic with ${words.length} words`);
+
+  await registrationPage.clickOnImportTab();
+
+  // Fill all 24 recovery phrase words
+  for (let i = 0; i < 24; i++) {
+    await registrationPage.fillRecoveryPhraseWord(i + 1, words[i]);
+  }
+
+  // Complete import flow
+  await registrationPage.scrollToNextImportButton();
+  await registrationPage.clickOnNextImportButton();
+
+  // Wait for Key Pairs screen (button-next-import disappears)
+  await window.waitForSelector('[data-testid="button-next-import"]', { state: 'hidden', timeout: 10000 });
+  console.log('On Key Pairs screen');
+
+  // Wait for toast to disappear before clicking Next
+  await registrationPage.waitForElementToDisappear(registrationPage.toastMessageSelector);
+
+  // Click final Next button with retry
+  await registrationPage.clickOnFinalNextButtonWithRetry();
+  console.log('Account Setup completed');
+}
+
+/**
+ * Full org-mode test environment setup.
+ * Extracts duplicated setup logic from org-mode tests (DRY).
+ *
+ * This function:
+ * 1. Seeds org data (user + transactions + mnemonic)
+ * 2. Registers locally with unique email
+ * 3. Connects to organization and signs in as k6 user
+ * 4. Imports the seed mnemonic to complete Account Setup
+ */
+export async function setupOrgModeTestEnvironment(
+  window: Page,
+  registrationPage: RegistrationPage,
+  organizationPage: OrganizationPage,
+  testNamePrefix: string,
+): Promise<void> {
+  // Step 1: Seed org-mode test data
+  await seedOrgPerfData();
+
+  // Step 2: Register locally with unique email
+  const localPassword = 'TestPassword123';
+  await registrationPage.completeRegistration(
+    `${testNamePrefix}-${Date.now()}@test.com`,
+    localPassword,
+  );
+
+  // Step 3: Connect to organization and sign in as k6 perf user
+  await organizationPage.setupOrganization();
+  await organizationPage.waitForElementToBeVisible(
+    organizationPage.emailForOrganizationInputSelector,
+  );
+  await organizationPage.signInOrganization(K6_USER_EMAIL, K6_USER_PASSWORD, localPassword);
+
+  // Step 4: Import the seed mnemonic
+  await importSeedMnemonic(window, registrationPage);
 }

@@ -17,9 +17,11 @@ import {
   collectPerformanceSamples,
   waitForRowCount,
   formatDuration,
+  DATA_VOLUMES,
 } from './performanceUtils.js';
 
-const DB_ITEM_COUNT = 100;
+// Volume requirement from k6 constants (SSOT)
+const DB_ITEM_COUNT = DATA_VOLUMES.FILES;
 const MIN_ROWS = 50; // Strict: require at least 50 rows rendered
 const FILE_ROW_SELECTOR = '[data-testid^="p-file-id-"]';
 

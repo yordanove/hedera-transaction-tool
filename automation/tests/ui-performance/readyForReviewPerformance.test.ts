@@ -22,19 +22,16 @@ import {
   setPageSize,
   waitForRowCount,
   getPagerTotal,
+  PAGE_SIZE,
+  TRANSACTION_ROW_SELECTOR,
+  DATA_VOLUMES,
 } from './performanceUtils.js';
-import {
-  seedOrgPerfData,
-  readSeedMnemonic,
-  K6_USER_EMAIL,
-  K6_USER_PASSWORD,
-} from './seed-org-perf-data.js';
+import { setupOrgModeTestEnvironment } from './seed-org-perf-data.js';
 
 dotenv.config();
 
-const PAGE_SIZE = 50;
-const REQUIRED_TOTAL = 100; // Minimum transactions expected from seeding
-const TRANSACTION_ROW_SELECTOR = '.table-custom tbody tr';
+// Volume requirement from k6 constants (SSOT)
+const REQUIRED_TOTAL = DATA_VOLUMES.READY_FOR_REVIEW;
 
 let app: ElectronApplication;
 let window: Page;
@@ -43,58 +40,13 @@ let organizationPage: OrganizationPage;
 
 test.describe('Ready for Review Performance (Org Mode)', () => {
   test.beforeAll(async () => {
-    // Seed org-mode test data (creates k6 user + transactions + mnemonic)
-    await seedOrgPerfData();
-
     await resetDbState();
     ({ app, window } = await setupApp());
     registrationPage = new RegistrationPage(window);
     organizationPage = new OrganizationPage(window);
 
-    // Register locally with unique email
-    const localPassword = 'TestPassword123';
-    await registrationPage.completeRegistration(
-      `perf-ready-for-review-${Date.now()}@test.com`,
-      localPassword,
-    );
-
-    // Connect to organization and sign in as k6 perf user
-    await organizationPage.setupOrganization();
-    await organizationPage.waitForElementToBeVisible(
-      organizationPage.emailForOrganizationInputSelector,
-    );
-    await organizationPage.signInOrganization(K6_USER_EMAIL, K6_USER_PASSWORD, localPassword);
-
-    // Complete Account Setup by IMPORTING the mnemonic from seed
-    await registrationPage.waitForElementToBeVisible(registrationPage.createNewTabSelector);
-    console.log('Account Setup screen visible, importing seed mnemonic...');
-
-    // Read the mnemonic saved by seedOrgPerfData
-    const words = readSeedMnemonic();
-    console.log(`Read mnemonic with ${words.length} words`);
-
-    // Use Import tab to import the mnemonic
-    await registrationPage.clickOnImportTab();
-
-    // Fill all 24 recovery phrase words
-    for (let i = 0; i < 24; i++) {
-      await registrationPage.fillRecoveryPhraseWord(i + 1, words[i]);
-    }
-
-    // Complete import flow
-    await registrationPage.scrollToNextImportButton();
-    await registrationPage.clickOnNextImportButton();
-
-    // Wait for Key Pairs screen (button-next-import disappears)
-    await window.waitForSelector('[data-testid="button-next-import"]', { state: 'hidden', timeout: 10000 });
-    console.log('On Key Pairs screen');
-
-    // Wait for toast to disappear before clicking Next
-    await registrationPage.waitForElementToDisappear(registrationPage.toastMessageSelector);
-
-    // Click final Next button with retry - waits for settings link (same pattern as working tests)
-    await registrationPage.clickOnFinalNextButtonWithRetry();
-    console.log('Account Setup completed');
+    // Setup org-mode test environment (seed, register, sign in, import mnemonic)
+    await setupOrgModeTestEnvironment(window, registrationPage, organizationPage, 'perf-ready-for-review');
   });
 
   test.afterAll(async () => {

@@ -5,8 +5,16 @@
  */
 
 import { Page } from '@playwright/test';
+import { DATA_VOLUMES, THRESHOLDS } from '../../k6/src/config/constants.js';
 
-export const TARGET_LOAD_TIME_MS = 1000;
+// Re-export k6 constants for UI perf tests (SSOT)
+export { DATA_VOLUMES, THRESHOLDS };
+
+// UI-specific constants
+export const TARGET_LOAD_TIME_MS = THRESHOLDS.PAGE_LOAD_MS;
+export const PAGE_SIZE = 50; // Max visible items per page in UI
+export const ROW_WAIT_TIMEOUT_MS = 5000; // Default timeout for waitForRowCount
+export const TRANSACTION_ROW_SELECTOR = '.table-custom tbody tr'; // Transaction table rows
 
 export interface PerformanceSamples {
   avg: number;
@@ -101,7 +109,7 @@ export async function waitForRowCount(
   window: Page,
   rowSelector: string,
   minCount: number,
-  timeout: number = 5000,
+  timeout: number = ROW_WAIT_TIMEOUT_MS,
 ): Promise<number> {
   const startTime = Date.now();
 
@@ -127,7 +135,7 @@ export async function measureListLoadTime(
   navigationAction: () => Promise<void>,
   rowSelector: string,
   minCount: number,
-  timeout: number = 5000,
+  timeout: number = ROW_WAIT_TIMEOUT_MS,
 ): Promise<{ loadTime: number; rowCount: number }> {
   const startTime = Date.now();
   await navigationAction();

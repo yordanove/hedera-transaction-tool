@@ -19,11 +19,13 @@ import {
   setPageSize,
   formatDuration,
   getPagerTotal,
+  PAGE_SIZE,
+  DATA_VOLUMES,
 } from './performanceUtils.js';
 
-const DB_ITEM_COUNT = 100; // Items seeded to DB
-const REQUIRED_TOTAL = 100; // Minimum items expected from seeding
-const PAGE_SIZE = 50; // Max items per page in UI
+// Volume requirement from k6 constants (SSOT)
+const DB_ITEM_COUNT = DATA_VOLUMES.DRAFTS;
+const REQUIRED_TOTAL = DATA_VOLUMES.DRAFTS;
 const DRAFT_ROW_SELECTOR = '[data-testid^="button-draft-continue-"]'; // One per row
 
 let app: ElectronApplication;
@@ -59,19 +61,22 @@ test.describe('Drafts Page Performance', () => {
   });
 
   test('Drafts tab should load in under 1 second (p95)', async () => {
-    // Navigate to Transactions page first
+    // Navigate to Transactions page and Drafts tab first
     await window.click('[data-testid="button-menu-transactions"]');
     await window.waitForLoadState('networkidle');
+    await window.click('text=Drafts');
+    await window.waitForLoadState('networkidle');
 
-    // Try to set page size (may not have pager in local mode)
+    // Try to set page size
     await setPageSize(window, PAGE_SIZE);
 
-    // Validate pager shows sufficient total items (volume enforcement)
+    // Validate pager shows sufficient total items (volume enforcement - STRICT)
+    // BUG: Drafts.vue:207-212 overwrites totalItems with group count instead of drafts+groups
+    // This test will fail until the front-end bug is fixed
     const pagerTotal = await getPagerTotal(window);
-    if (pagerTotal !== null) {
-      expect(pagerTotal, `Pager shows only ${pagerTotal} items, need >= ${REQUIRED_TOTAL}`).toBeGreaterThanOrEqual(REQUIRED_TOTAL);
-      console.log(`Pager total: ${pagerTotal} items`);
-    }
+    expect(pagerTotal, 'Pager not found - volume enforcement failed').not.toBeNull();
+    expect(pagerTotal!, `Pager shows only ${pagerTotal} items, need >= ${REQUIRED_TOTAL}`).toBeGreaterThanOrEqual(REQUIRED_TOTAL);
+    console.log(`Pager total: ${pagerTotal} items`);
 
     // Collect multiple samples for p95
     const samples = await collectPerformanceSamples(async () => {
