@@ -13,11 +13,11 @@ import * as fs from 'fs';
 import { fileURLToPath } from 'url';
 import { createClient } from 'redis';
 import { Page } from '@playwright/test';
-import { TEST_CREDENTIALS } from '../../k6/src/config/constants.js';
+import { TEST_CREDENTIALS, TEST_USER_POOL } from '../../k6/src/config/constants.js';
 import { RegistrationPage } from '../../pages/RegistrationPage.js';
 import { OrganizationPage } from '../../pages/OrganizationPage.js';
 import { DEBUG } from './performanceUtils.js';
-import { isDestructiveAllowed } from '../../utils/databaseUtil.js';
+import { isDestructiveAllowed, isLocalHost } from '../../utils/databaseUtil.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,6 +25,21 @@ const __dirname = path.dirname(__filename);
 // Re-export credentials for backward compatibility (SSOT: k6 constants)
 export const K6_USER_EMAIL = TEST_CREDENTIALS.EMAIL;
 export const K6_USER_PASSWORD = TEST_CREDENTIALS.PASSWORD;
+
+/**
+ * Get a test user from the pool based on test name.
+ * Distributes tests across users to avoid rate limiting (3 logins/min per email).
+ * Uses simple hash of test name for consistent user assignment.
+ *
+ * @param testName - Unique test identifier (e.g., 'perf-history', 'perf-sign-all')
+ * @returns User credentials from the pool
+ */
+export function getPooledTestUser(testName: string): { email: string; password: string } {
+  // Simple hash: sum of char codes mod pool size
+  const hash = testName.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  const index = hash % TEST_USER_POOL.length;
+  return TEST_USER_POOL[index];
+}
 
 interface SeedResult {
   userCreated: boolean;
@@ -38,14 +53,24 @@ interface SeedResult {
  * Backend limits logins to 3/minute per email (ANONYMOUS_MINUTE_LIMIT=3).
  *
  * Staging-safe: On non-localhost, skips flush to avoid affecting other users.
+ * Uses strict URL hostname parsing (not substring match) for safety.
  */
 async function flushRateLimiter(): Promise<void> {
   const redisUrl = process.env.REDIS_URL || 'redis://localhost:6380';
 
-  // Check if we're on localhost - if not, skip flush for staging safety
-  const isLocalRedis = redisUrl.includes('localhost') || redisUrl.includes('127.0.0.1');
+  // Strict hostname check - parse URL instead of substring match
+  // This prevents false positives like 'localhost-prod.example.com'
+  let redisHost: string;
+  try {
+    redisHost = new URL(redisUrl).hostname;
+  } catch {
+    // Invalid URL format, assume local for backward compatibility
+    redisHost = 'localhost';
+  }
+
+  const isLocalRedis = isLocalHost(redisHost);
   if (!isLocalRedis && !isDestructiveAllowed()) {
-    if (DEBUG) console.log('  Skipping Redis flush (non-localhost, staging-safe mode)');
+    if (DEBUG) console.log(`  Skipping Redis flush (${redisHost} is non-localhost, staging-safe mode)`);
     return;
   }
 
@@ -88,26 +113,25 @@ export async function seedOrgPerfData(): Promise<SeedResult> {
     // Step 0: Flush rate limiter to prevent "too many requests" errors
     await flushRateLimiter();
 
-    // Step 1: Create test user (if not exists)
-    if (DEBUG) console.log('  Step 1: Creating k6 test user...');
+    // Step 1: Create all pool users (for rate limiting avoidance)
+    if (DEBUG) console.log('  Step 1: Creating pool users...');
     execSync('npx tsx k6/helpers/seed-test-users.ts', {
       cwd: automationDir,
       stdio: 'inherit',
       env: {
         ...process.env,
-        TEST_USER_EMAIL: K6_USER_EMAIL,
-        TEST_USER_PASSWORD: K6_USER_PASSWORD,
+        SEED_POOL: 'true',
       },
     });
 
-    // Step 2: Seed transactions and generate mnemonic
-    if (DEBUG) console.log('  Step 2: Seeding transactions...');
+    // Step 2: Seed transactions for all pool users and generate mnemonic
+    if (DEBUG) console.log('  Step 2: Seeding transactions for all pool users...');
     execSync('npx tsx k6/helpers/seed-perf-data.ts', {
       cwd: automationDir,
       stdio: 'inherit',
       env: {
         ...process.env,
-        TEST_USER_EMAIL: K6_USER_EMAIL,
+        SEED_POOL: 'true',
       },
     });
 
@@ -223,12 +247,14 @@ export async function setupOrgModeTestEnvironment(
     localPassword,
   );
 
-  // Step 3: Connect to organization and sign in as k6 perf user
+  // Step 3: Connect to organization and sign in as pooled user
+  // Uses different email per test to avoid backend rate limiting (3 logins/min per email)
+  const pooledUser = getPooledTestUser(testNamePrefix);
   await organizationPage.setupOrganization();
   await organizationPage.waitForElementToBeVisible(
     organizationPage.emailForOrganizationInputSelector,
   );
-  await organizationPage.signInOrganization(K6_USER_EMAIL, K6_USER_PASSWORD, localPassword);
+  await organizationPage.signInOrganization(pooledUser.email, pooledUser.password, localPassword);
 
   // Step 4: Import the seed mnemonic
   await importSeedMnemonic(window, registrationPage);

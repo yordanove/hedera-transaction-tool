@@ -29,7 +29,7 @@ import {
   Timestamp,
   Transaction,
 } from '@hashgraph/sdk';
-import { DATA_VOLUMES, SEED_MARKER } from '../src/config/constants.js';
+import { DATA_VOLUMES, SEED_MARKER, TEST_USER_POOL } from '../src/config/constants.js';
 import type { SignatureMap } from '../src/types/api.types.js';
 
 // ESM compatibility for __dirname
@@ -634,10 +634,45 @@ async function validateSeededData(client: Client): Promise<void> {
   }
 }
 
-async function seedData(): Promise<void> {
-  const email = getTestUserEmail();
+/**
+ * Seed data for a single user.
+ * Creates user_key and transactions for the specified email.
+ * Requires initializeKeyPair() to be called first.
+ */
+async function seedDataForUser(client: Client, email: string): Promise<void> {
+  // Find test user
+  const userResult: QueryResult<UserRow> = await client.query(
+    'SELECT id FROM "user" WHERE email = $1',
+    [email],
+  );
 
-  // Initialize keypair for signing transactions
+  if (userResult.rows.length === 0) {
+    console.error(`Error: User ${email} not found`);
+    console.log('\nCreate the test user first:');
+    console.log(
+      `  TEST_USER_EMAIL='${email}' TEST_USER_PASSWORD='yourpassword' npx tsx k6/helpers/seed-test-users.ts`,
+    );
+    throw new Error(`User ${email} not found`);
+  }
+
+  const userId = userResult.rows[0].id;
+  console.log(`\n--- Seeding data for user: ${email} (id: ${userId}) ---`);
+
+  // Clean up previous seed data (must happen before creating new user key)
+  await cleanupPreviousSeed(client, userId);
+
+  // Create new user key with the generated keypair (shared across all pool users)
+  const userKeyId = await findOrCreateUserKey(client, userId);
+
+  // Seed transactions
+  await seedSignTransactions(client, userKeyId);
+  await seedHistoryTransactions(client, userKeyId);
+  await seedApproveTransactions(client, userId, userKeyId);
+  await seedTransactionGroups(client, userKeyId);
+}
+
+async function seedData(): Promise<void> {
+  // Initialize keypair for signing transactions (ONCE - shared across all users)
   await initializeKeyPair();
 
   const client = new Client({
@@ -652,57 +687,54 @@ async function seedData(): Promise<void> {
     await client.connect();
     console.log('Connected to PostgreSQL');
 
-    // Find test user
-    const userResult: QueryResult<UserRow> = await client.query(
-      'SELECT id FROM "user" WHERE email = $1',
-      [email],
-    );
+    // Determine which users to seed
+    const usersToSeed: string[] = [];
 
-    if (userResult.rows.length === 0) {
-      console.error(`Error: User ${email} not found`);
-      console.log('\nCreate the test user first:');
-      console.log(
-        `  TEST_USER_EMAIL='${email}' TEST_USER_PASSWORD='yourpassword' npx tsx k6/helpers/seed-test-users.ts`,
-      );
-      process.exit(1);
+    if (process.env.SEED_POOL === 'true') {
+      // SEED_POOL mode: seed data for all pool users
+      console.log(`\nSEED_POOL mode: seeding ${TEST_USER_POOL.length} users`);
+      for (const poolUser of TEST_USER_POOL) {
+        usersToSeed.push(poolUser.email);
+      }
+    } else {
+      // Single user mode (default)
+      usersToSeed.push(getTestUserEmail());
     }
 
-    const userId = userResult.rows[0].id;
-    console.log(`Found user: ${email} (id: ${userId})`);
+    // Seed data for each user
+    for (const email of usersToSeed) {
+      await seedDataForUser(client, email);
+    }
 
-    // Clean up previous seed data (must happen before creating new user key)
-    await cleanupPreviousSeed(client, userId);
-
-    // Create new user key with the generated keypair
-    const userKeyId = await findOrCreateUserKey(client, userId);
-
-    // Seed transactions
-    await seedSignTransactions(client, userKeyId);
-    await seedHistoryTransactions(client, userKeyId);
-    await seedApproveTransactions(client, userId, userKeyId);
-    await seedTransactionGroups(client, userKeyId);
-
-    // Generate signatures.json for PRE_SIGNED mode
+    // Generate signatures.json for PRE_SIGNED mode (all users' transactions)
     generateSignaturesFile();
 
-    // Save private key for debugging/manual signing
+    // Save private key for debugging/manual signing (shared across all users)
     savePrivateKey();
 
     // Validate seeded data
     await validateSeededData(client);
 
     // Summary
-    const total = SIGN_COUNT + HISTORY_COUNT + APPROVE_COUNT + GROUP_SIZE;
+    const txPerUser = SIGN_COUNT + HISTORY_COUNT + APPROVE_COUNT + GROUP_SIZE;
+    const totalTx = txPerUser * usersToSeed.length;
     console.log('\n=== Seeding Complete ===');
-    console.log(`Total transactions created: ${total}`);
-    console.log(`  /transactions/sign: ${SIGN_COUNT}`);
-    console.log(`  /transactions/history: ${HISTORY_COUNT}`);
-    console.log(`  /transactions/approve: ${APPROVE_COUNT}`);
-    console.log(`  Transaction group: 1 group with ${GROUP_SIZE} transactions`);
-    console.log('\nRun k6 tests with:');
-    console.log(
-      `  k6 run -e USER_EMAIL='${email}' -e USER_PASSWORD='yourpassword' k6/dist/tab-load-times.js`,
-    );
+    console.log(`Users seeded: ${usersToSeed.length}`);
+    console.log(`Transactions per user: ${txPerUser}`);
+    console.log(`Total transactions created: ${totalTx}`);
+    console.log(`  /transactions/sign: ${SIGN_COUNT} per user`);
+    console.log(`  /transactions/history: ${HISTORY_COUNT} per user`);
+    console.log(`  /transactions/approve: ${APPROVE_COUNT} per user`);
+    console.log(`  Transaction group: 1 group with ${GROUP_SIZE} transactions per user`);
+
+    if (usersToSeed.length === 1) {
+      console.log('\nRun k6 tests with:');
+      console.log(
+        `  k6 run -e USER_EMAIL='${usersToSeed[0]}' -e USER_PASSWORD='yourpassword' k6/dist/tab-load-times.js`,
+      );
+    } else {
+      console.log('\nPool users ready for UI performance tests.');
+    }
   } catch (error) {
     const err = error as NodeJS.ErrnoException;
     if (err.code === 'ECONNREFUSED') {

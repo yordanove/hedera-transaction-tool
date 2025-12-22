@@ -16,23 +16,40 @@ dotenv.config({ path: path.join(__dirname, '../.env') });
 export { SEED_MARKER } from '../k6/src/config/constants.js';
 
 /**
+ * Local host identifiers for staging safety checks.
+ * Includes IPv4 localhost, IPv6 localhost.
+ * WARNING: SSH tunnels using localhost will bypass safety checks.
+ */
+export const LOCAL_HOSTS = ['localhost', '127.0.0.1', '::1'];
+
+/**
+ * Check if a hostname is a local address.
+ */
+export function isLocalHost(host: string): boolean {
+  return LOCAL_HOSTS.includes(host);
+}
+
+/**
  * Check if destructive database operations are allowed.
  * Blocks operations on non-localhost unless explicitly allowed.
  * This prevents accidental data deletion on staging/production.
+ *
+ * WARNING: If staging is accessed via localhost tunnel (e.g., SSH -L),
+ * this check will be bypassed. Use real hostnames for staging.
  */
 export function isDestructiveAllowed(): boolean {
   const allowDestructive = process.env.ALLOW_DESTRUCTIVE === 'true';
   const host = process.env.POSTGRES_HOST || 'localhost';
-  const isLocalHost = host === 'localhost' || host === '127.0.0.1';
+  const hostIsLocal = isLocalHost(host);
 
-  if (!allowDestructive && !isLocalHost) {
+  if (!allowDestructive && !hostIsLocal) {
     console.error('⚠️  DESTRUCTIVE OPERATIONS BLOCKED');
     console.error(`   POSTGRES_HOST=${host} is not localhost`);
     console.error('   Set ALLOW_DESTRUCTIVE=true to override');
     return false;
   }
 
-  if (allowDestructive && !isLocalHost) {
+  if (allowDestructive && !hostIsLocal) {
     console.warn(`⚠️  Running destructive ops on non-localhost (${host})!`);
   }
 

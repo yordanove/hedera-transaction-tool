@@ -74,6 +74,18 @@ export const TEST_CREDENTIALS = {
 } as const;
 
 /**
+ * Test user pool for staging rate limiting avoidance.
+ * Each test can use a different user to avoid backend rate limits (3 logins/min per email).
+ * All emails match cleanup pattern 'k6perf@%' for safe staging cleanup.
+ */
+export const TEST_USER_POOL = [
+  { email: 'k6perf@1.test', password: 'Password123' },
+  { email: 'k6perf@2.test', password: 'Password123' },
+  { email: 'k6perf@3.test', password: 'Password123' },
+  { email: 'k6perf@4.test', password: 'Password123' },
+] as const;
+
+/**
  * Signature modes for sign-all tests
  */
 export const SIGNATURE_MODES = {
