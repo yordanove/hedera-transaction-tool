@@ -30,6 +30,7 @@ import {
   TRANSACTION_ROW_SELECTOR,
   DATA_VOLUMES,
   THRESHOLDS,
+  DEBUG,
 } from './performanceUtils.js';
 import { setupOrgModeTestEnvironment } from './seed-org-perf-data.js';
 
@@ -75,12 +76,12 @@ test.describe('Sign All Performance (Org Mode)', () => {
 
     // Wait for transaction rows to appear
     const rowCount = await waitForRowCount(window, TRANSACTION_ROW_SELECTOR, 1, 5000);
-    console.log(`Found ${rowCount} transaction rows`);
+    if (DEBUG) console.log(`Found ${rowCount} transaction rows`);
 
     // Find a group row using the bi-stack icon (reliable group marker)
     const groupRow = window.locator('tr').filter({ has: window.locator('i.bi-stack') }).first();
     await expect(groupRow, 'No group row found - check seeding').toBeVisible({ timeout: 5000 });
-    console.log('Found group row with bi-stack icon');
+    if (DEBUG) console.log('Found group row with bi-stack icon');
 
     // Click Details button inside the group row
     const detailsButton = groupRow.locator('button:has-text("Details")');
@@ -92,12 +93,12 @@ test.describe('Sign All Performance (Org Mode)', () => {
     // Wait for Sign All button to appear on the group details page
     const signAllButton = await window.waitForSelector('[data-testid="button-sign-group"]', { timeout: 10000 });
     expect(signAllButton, 'Sign All button not found on group details page').not.toBeNull();
-    console.log('Found Sign All button on group details page');
+    if (DEBUG) console.log('Found Sign All button on group details page');
 
     // Count transactions in the group (STRICT: require minimum volume)
     const initialCount = await waitForRowCount(window, TRANSACTION_ROW_SELECTOR, MIN_GROUP_SIZE, 15000);
     expect(initialCount, `Group has ${initialCount} txns, need >= ${MIN_GROUP_SIZE}`).toBeGreaterThanOrEqual(MIN_GROUP_SIZE);
-    console.log(`Group has ${initialCount} transactions to sign`);
+    if (DEBUG) console.log(`Group has ${initialCount} transactions to sign`);
 
     // Measure time to sign all
     const startTime = Date.now();

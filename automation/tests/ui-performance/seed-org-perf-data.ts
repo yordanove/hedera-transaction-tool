@@ -16,6 +16,7 @@ import { Page } from '@playwright/test';
 import { TEST_CREDENTIALS } from '../../k6/src/config/constants.js';
 import { RegistrationPage } from '../../pages/RegistrationPage.js';
 import { OrganizationPage } from '../../pages/OrganizationPage.js';
+import { DEBUG } from './performanceUtils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,9 +46,9 @@ async function flushRateLimiter(): Promise<void> {
     const keys = await redis.keys('*:hits');
     if (keys.length > 0) {
       await redis.del(keys);
-      console.log(`  Flushed ${keys.length} rate limiter keys from Redis`);
+      if (DEBUG) console.log(`  Flushed ${keys.length} rate limiter keys from Redis`);
     } else {
-      console.log('  No rate limiter keys to flush');
+      if (DEBUG) console.log('  No rate limiter keys to flush');
     }
   } catch (error) {
     // Redis might not be running - log but don't fail
@@ -77,7 +78,7 @@ export async function seedOrgPerfData(): Promise<SeedResult> {
     await flushRateLimiter();
 
     // Step 1: Create test user (if not exists)
-    console.log('  Step 1: Creating k6 test user...');
+    if (DEBUG) console.log('  Step 1: Creating k6 test user...');
     execSync('npx tsx k6/helpers/seed-test-users.ts', {
       cwd: automationDir,
       stdio: 'inherit',
@@ -89,7 +90,7 @@ export async function seedOrgPerfData(): Promise<SeedResult> {
     });
 
     // Step 2: Seed transactions and generate mnemonic
-    console.log('  Step 2: Seeding transactions...');
+    if (DEBUG) console.log('  Step 2: Seeding transactions...');
     execSync('npx tsx k6/helpers/seed-perf-data.ts', {
       cwd: automationDir,
       stdio: 'inherit',
@@ -157,10 +158,10 @@ export async function importSeedMnemonic(
   registrationPage: RegistrationPage,
 ): Promise<void> {
   await registrationPage.waitForElementToBeVisible(registrationPage.createNewTabSelector);
-  console.log('Account Setup screen visible, importing seed mnemonic...');
+  if (DEBUG) console.log('Account Setup screen visible, importing seed mnemonic...');
 
   const words = readSeedMnemonic();
-  console.log(`Read mnemonic with ${words.length} words`);
+  if (DEBUG) console.log(`Read mnemonic with ${words.length} words`);
 
   await registrationPage.clickOnImportTab();
 
@@ -175,7 +176,7 @@ export async function importSeedMnemonic(
 
   // Wait for Key Pairs screen (button-next-import disappears)
   await window.waitForSelector('[data-testid="button-next-import"]', { state: 'hidden', timeout: 10000 });
-  console.log('On Key Pairs screen');
+  if (DEBUG) console.log('On Key Pairs screen');
 
   // Wait for toast to disappear before clicking Next
   await registrationPage.waitForElementToDisappear(registrationPage.toastMessageSelector);

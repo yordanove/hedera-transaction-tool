@@ -10,6 +10,9 @@ import { DATA_VOLUMES, THRESHOLDS } from '../../k6/src/config/constants.js';
 // Re-export k6 constants for UI perf tests (SSOT)
 export { DATA_VOLUMES, THRESHOLDS };
 
+// Debug mode - enable with DEBUG=true environment variable
+export const DEBUG = process.env.DEBUG === 'true';
+
 // UI-specific constants
 export const TARGET_LOAD_TIME_MS = THRESHOLDS.PAGE_LOAD_MS;
 export const PAGE_SIZE = 50; // Max visible items per page in UI

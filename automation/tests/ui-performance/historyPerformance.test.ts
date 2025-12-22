@@ -28,6 +28,7 @@ import {
   PAGE_SIZE,
   TRANSACTION_ROW_SELECTOR,
   DATA_VOLUMES,
+  DEBUG,
 } from './performanceUtils.js';
 import { setupOrgModeTestEnvironment } from './seed-org-perf-data.js';
 
@@ -86,7 +87,7 @@ test.describe('History Performance (Org Mode)', () => {
     // Verify data is visible before measuring
     const initialRowCount = await waitForRowCount(window, TRANSACTION_ROW_SELECTOR, 1, 5000);
     expect(initialRowCount, 'No transactions visible - check k6:seed:all and network').toBeGreaterThan(0);
-    console.log(`Found ${initialRowCount} transactions on History tab`);
+    if (DEBUG) console.log(`Found ${initialRowCount} transactions on History tab`);
 
     // Collect multiple samples for p95
     const samples = await collectPerformanceSamples(async () => {

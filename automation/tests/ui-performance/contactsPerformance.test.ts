@@ -18,6 +18,7 @@ import {
   formatDuration,
   waitForRowCount,
   DATA_VOLUMES,
+  DEBUG,
 } from './performanceUtils.js';
 
 // Load environment variables from .env file
@@ -45,10 +46,10 @@ test.describe('Contacts Page Performance', () => {
     contactListPage = new ContactListPage(window);
 
     // Create 100+ test users in backend (they will appear as contacts)
-    console.log(`Creating ${DB_ITEM_COUNT} users in backend...`);
+    if (DEBUG) console.log(`Creating ${DB_ITEM_COUNT} users in backend...`);
     await organizationPage.createUsers(DB_ITEM_COUNT);
     const testUser = organizationPage.getUser(0);
-    console.log(`Created ${DB_ITEM_COUNT} users`);
+    if (DEBUG) console.log(`Created ${DB_ITEM_COUNT} users`);
 
     // Register locally
     const password = 'TestPassword123';
@@ -69,7 +70,7 @@ test.describe('Contacts Page Performance', () => {
 
     // Complete Account Setup (required for isLoggedInOrganization() to return true)
     await registrationPage.waitForElementToBeVisible(registrationPage.createNewTabSelector);
-    console.log('Account Setup screen visible, completing setup...');
+    if (DEBUG) console.log('Account Setup screen visible, completing setup...');
 
     // Generate recovery phrase
     await registrationPage.clickOnCreateNewTab();
@@ -88,7 +89,7 @@ test.describe('Contacts Page Performance', () => {
     // Wait for toast to clear and finalize
     await registrationPage.waitForElementToDisappear(registrationPage.toastMessageSelector);
     await registrationPage.clickOnFinalNextButtonWithRetry();
-    console.log('Account Setup completed');
+    if (DEBUG) console.log('Account Setup completed');
   });
 
   test.afterAll(async () => {
