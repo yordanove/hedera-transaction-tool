@@ -154,9 +154,3 @@ automation/data/102.json
 
 # files with notes and scripts for manual data/image manipulation
 *.helper
-.vscode
-
-# Local Claude Code reference files (not for VCS)
-CLAUDE.md
-hedera-tool-reference.md
-QA-EXECUTION-PLAN.md
