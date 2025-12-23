@@ -128,8 +128,12 @@ async function findOrCreateUserKey(
   return result.rows[0].id;
 }
 
-async function cleanupPreviousSeed(client: Client, userId: number): Promise<void> {
-  console.log('Cleaning up previous seed data...');
+/**
+ * Clean up ALL seed data globally (not per-user).
+ * Call this ONCE before seeding multiple users to avoid wiping previous users' data.
+ */
+async function cleanupAllSeedData(client: Client): Promise<void> {
+  console.log('Cleaning up ALL previous seed data...');
 
   // Delete transaction_group_item entries (FK constraint on transactions)
   await client.query(
@@ -171,15 +175,19 @@ async function cleanupPreviousSeed(client: Client, userId: number): Promise<void
   );
 
   console.log(`Deleted ${txResult.rowCount} previous seed transactions`);
+}
 
-  // Delete ALL user keys for this user (ensures clean state for Account Setup)
-  // This is more aggressive but ensures the test user always needs Account Setup
+/**
+ * Clean up user keys for a specific user.
+ * Ensures clean state for Account Setup - user will need to import mnemonic.
+ */
+async function cleanupUserKeys(client: Client, userId: number): Promise<void> {
   const keyResult = await client.query(
     `DELETE FROM user_key WHERE "userId" = $1`,
     [userId],
   );
   if (keyResult.rowCount && keyResult.rowCount > 0) {
-    console.log(`Deleted ${keyResult.rowCount} user keys for test user`);
+    console.log(`Deleted ${keyResult.rowCount} user keys for user ${userId}`);
   }
 }
 
@@ -638,6 +646,7 @@ async function validateSeededData(client: Client): Promise<void> {
  * Seed data for a single user.
  * Creates user_key and transactions for the specified email.
  * Requires initializeKeyPair() to be called first.
+ * NOTE: Call cleanupAllSeedData() ONCE before calling this for multiple users.
  */
 async function seedDataForUser(client: Client, email: string): Promise<void> {
   // Find test user
@@ -658,8 +667,8 @@ async function seedDataForUser(client: Client, email: string): Promise<void> {
   const userId = userResult.rows[0].id;
   console.log(`\n--- Seeding data for user: ${email} (id: ${userId}) ---`);
 
-  // Clean up previous seed data (must happen before creating new user key)
-  await cleanupPreviousSeed(client, userId);
+  // Clean up user keys only (transaction cleanup happens globally before the loop)
+  await cleanupUserKeys(client, userId);
 
   // Create new user key with the generated keypair (shared across all pool users)
   const userKeyId = await findOrCreateUserKey(client, userId);
@@ -701,7 +710,10 @@ async function seedData(): Promise<void> {
       usersToSeed.push(getTestUserEmail());
     }
 
-    // Seed data for each user
+    // CLEANUP ONCE before seeding any users (prevents wiping earlier users' data)
+    await cleanupAllSeedData(client);
+
+    // Seed data for each user (user keys cleaned per-user, transactions not)
     for (const email of usersToSeed) {
       await seedDataForUser(client, email);
     }
