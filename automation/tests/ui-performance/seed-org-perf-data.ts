@@ -11,13 +11,11 @@ import { execSync } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import { fileURLToPath } from 'url';
-import { createClient } from 'redis';
 import { Page } from '@playwright/test';
 import { TEST_CREDENTIALS, TEST_USER_POOL } from '../../k6/src/config/constants.js';
 import { RegistrationPage } from '../../pages/RegistrationPage.js';
 import { OrganizationPage } from '../../pages/OrganizationPage.js';
 import { DEBUG } from './performanceUtils.js';
-import { isDestructiveAllowed, isLocalHost } from '../../utils/databaseUtil.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -48,53 +46,6 @@ interface SeedResult {
 }
 
 /**
- * Flush Redis rate limiter keys for the test user.
- * This prevents "too many requests" errors when running multiple org-mode tests.
- * Backend limits logins to 3/minute per email (ANONYMOUS_MINUTE_LIMIT=3).
- *
- * Staging-safe: On non-localhost, skips flush to avoid affecting other users.
- * Uses strict URL hostname parsing (not substring match) for safety.
- */
-async function flushRateLimiter(): Promise<void> {
-  const redisUrl = process.env.REDIS_URL || 'redis://localhost:6380';
-
-  // Strict hostname check - parse URL instead of substring match
-  // This prevents false positives like 'localhost-prod.example.com'
-  let redisHost: string;
-  try {
-    redisHost = new URL(redisUrl).hostname;
-  } catch {
-    // Invalid URL format, assume local for backward compatibility
-    redisHost = 'localhost';
-  }
-
-  const isLocalRedis = isLocalHost(redisHost);
-  if (!isLocalRedis && !isDestructiveAllowed()) {
-    if (DEBUG) console.log(`  Skipping Redis flush (${redisHost} is non-localhost, staging-safe mode)`);
-    return;
-  }
-
-  const redis = createClient({ url: redisUrl });
-
-  try {
-    await redis.connect();
-    // Delete all throttler keys (pattern: {hash:throttler-name}:hits)
-    const keys = await redis.keys('*:hits');
-    if (keys.length > 0) {
-      await redis.del(keys);
-      if (DEBUG) console.log(`  Flushed ${keys.length} rate limiter keys from Redis`);
-    } else {
-      if (DEBUG) console.log('  No rate limiter keys to flush');
-    }
-  } catch (error) {
-    // Redis might not be running - log but don't fail
-    console.warn('  Warning: Could not flush Redis rate limiter:', (error as Error).message);
-  } finally {
-    await redis.disconnect();
-  }
-}
-
-/**
  * Seed the PostgreSQL database with k6 test user and transactions.
  * Equivalent to running: npm run k6:seed:all
  *
@@ -110,9 +61,6 @@ export async function seedOrgPerfData(): Promise<SeedResult> {
   if (DEBUG) console.log('Seeding org-mode performance test data...');
 
   try {
-    // Step 0: Flush rate limiter to prevent "too many requests" errors
-    await flushRateLimiter();
-
     // Step 1: Create all pool users (for rate limiting avoidance)
     if (DEBUG) console.log('  Step 1: Creating pool users...');
     execSync('npx tsx k6/helpers/seed-test-users.ts', {
