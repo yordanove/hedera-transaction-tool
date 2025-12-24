@@ -61,8 +61,7 @@ export async function seedOrgPerfData(): Promise<SeedResult> {
   if (DEBUG) console.log('Seeding org-mode performance test data...');
 
   try {
-    // Step 1: Create all pool users (for rate limiting avoidance)
-    if (DEBUG) console.log('  Step 1: Creating pool users...');
+    if (DEBUG) console.log('  Creating pool users...');
     execSync('npx tsx k6/helpers/seed-test-users.ts', {
       cwd: automationDir,
       stdio: 'inherit',
@@ -72,8 +71,7 @@ export async function seedOrgPerfData(): Promise<SeedResult> {
       },
     });
 
-    // Step 2: Seed transactions for all pool users and generate mnemonic
-    if (DEBUG) console.log('  Step 2: Seeding transactions for all pool users...');
+    if (DEBUG) console.log('  Seeding transactions for all pool users...');
     execSync('npx tsx k6/helpers/seed-perf-data.ts', {
       cwd: automationDir,
       stdio: 'inherit',
@@ -83,7 +81,6 @@ export async function seedOrgPerfData(): Promise<SeedResult> {
       },
     });
 
-    // Verify mnemonic was generated
     if (!fs.existsSync(mnemonicPath)) {
       throw new Error(`Mnemonic file not found at ${mnemonicPath}`);
     }
@@ -148,12 +145,10 @@ export async function importSeedMnemonic(
 
   await registrationPage.clickOnImportTab();
 
-  // Fill all 24 recovery phrase words
   for (let i = 0; i < 24; i++) {
     await registrationPage.fillRecoveryPhraseWord(i + 1, words[i]);
   }
 
-  // Complete import flow
   await registrationPage.scrollToNextImportButton();
   await registrationPage.clickOnNextImportButton();
 
@@ -161,10 +156,7 @@ export async function importSeedMnemonic(
   await window.waitForSelector('[data-testid="button-next-import"]', { state: 'hidden', timeout: 10000 });
   if (DEBUG) console.log('On Key Pairs screen');
 
-  // Wait for toast to disappear before clicking Next
   await registrationPage.waitForElementToDisappear(registrationPage.toastMessageSelector);
-
-  // Click final Next button with retry
   await registrationPage.clickOnFinalNextButtonWithRetry();
   if (DEBUG) console.log('Account Setup completed');
 }
@@ -185,17 +177,14 @@ export async function setupOrgModeTestEnvironment(
   organizationPage: OrganizationPage,
   testNamePrefix: string,
 ): Promise<void> {
-  // Step 1: Seed org-mode test data
   await seedOrgPerfData();
 
-  // Step 2: Register locally with unique email
   const localPassword = 'TestPassword123';
   await registrationPage.completeRegistration(
     `${testNamePrefix}-${Date.now()}@test.com`,
     localPassword,
   );
 
-  // Step 3: Connect to organization and sign in as pooled user
   // Uses different email per test to avoid backend rate limiting (3 logins/min per email)
   const pooledUser = getPooledTestUser(testNamePrefix);
   await organizationPage.setupOrganization();
@@ -204,6 +193,5 @@ export async function setupOrgModeTestEnvironment(
   );
   await organizationPage.signInOrganization(pooledUser.email, pooledUser.password, localPassword);
 
-  // Step 4: Import the seed mnemonic
   await importSeedMnemonic(window, registrationPage);
 }

@@ -50,7 +50,6 @@ test.describe('History Performance (Org Mode)', () => {
     registrationPage = new RegistrationPage(window);
     organizationPage = new OrganizationPage(window);
 
-    // Setup org-mode test environment (seed, register, sign in, import mnemonic)
     await setupOrgModeTestEnvironment(window, registrationPage, organizationPage, 'perf-history');
   });
 
@@ -60,11 +59,9 @@ test.describe('History Performance (Org Mode)', () => {
   });
 
   test('History tab should load in under 1 second (p95)', async () => {
-    // Navigate to Transactions page and History first
     await window.click(SELECTORS.MENU_TRANSACTIONS);
     await window.waitForLoadState('networkidle');
 
-    // Click History and wait for its API response
     // Use Promise.all to capture the response that comes after clicking
     // App uses either /transaction-nodes or /transactions/history depending on version
     await Promise.all([
@@ -76,10 +73,9 @@ test.describe('History Performance (Org Mode)', () => {
     ]);
     await window.waitForLoadState('networkidle');
 
-    // Try to set page size if pager exists
     await setPageSize(window, PAGE_SIZE);
 
-    // Validate pager shows sufficient total items (volume enforcement - STRICT)
+    // Volume enforcement - STRICT
     const pagerTotal = await getPagerTotal(window);
     expect(pagerTotal, 'Pager not found - volume enforcement failed').not.toBeNull();
     expect(pagerTotal!, `Pager shows only ${pagerTotal} items, need >= ${REQUIRED_TOTAL}`).toBeGreaterThanOrEqual(REQUIRED_TOTAL);
@@ -90,13 +86,10 @@ test.describe('History Performance (Org Mode)', () => {
     expect(initialRowCount, 'No transactions visible - check k6:seed:all and network').toBeGreaterThan(0);
     if (DEBUG) console.log(`Found ${initialRowCount} transactions on History tab`);
 
-    // Collect multiple samples for p95
     const samples = await collectPerformanceSamples(async () => {
-      // Navigate away first
       await window.click(SELECTORS.TAB_READY_TO_SIGN);
       await window.waitForLoadState('networkidle');
 
-      // Measure page load time
       const startTime = Date.now();
       await window.click(SELECTORS.TAB_HISTORY);
       await window.waitForLoadState('networkidle');

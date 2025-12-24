@@ -41,12 +41,10 @@ test.describe('Drafts Page Performance', () => {
     ({ app, window } = await setupApp());
     registrationPage = new RegistrationPage(window);
 
-    // Register and login
     testEmail = `perf-drafts-${Date.now()}@test.com`;
     const password = 'TestPassword123';
     await registrationPage.completeRegistration(testEmail, password);
 
-    // Seed test data
     const result = await seedLocalPerfData(testEmail);
     seededCount = result.drafts;
     if (DEBUG) console.log(`Seeded ${seededCount} drafts for performance test`);
@@ -62,13 +60,11 @@ test.describe('Drafts Page Performance', () => {
   });
 
   test('Drafts tab should load in under 1 second (p95)', async () => {
-    // Navigate to Transactions page and Drafts tab first
     await window.click(SELECTORS.MENU_TRANSACTIONS);
     await window.waitForLoadState('networkidle');
     await window.click(SELECTORS.TAB_DRAFTS);
     await window.waitForLoadState('networkidle');
 
-    // Try to set page size
     await setPageSize(window, PAGE_SIZE);
 
     // Validate pager shows sufficient total items (volume enforcement - STRICT)
@@ -79,13 +75,10 @@ test.describe('Drafts Page Performance', () => {
     expect(pagerTotal!, `Pager shows only ${pagerTotal} items, need >= ${REQUIRED_TOTAL}`).toBeGreaterThanOrEqual(REQUIRED_TOTAL);
     console.log(`Pager total: ${pagerTotal} items`);
 
-    // Collect multiple samples for p95
     const samples = await collectPerformanceSamples(async () => {
-      // Navigate away first
       await window.click(SELECTORS.TAB_HISTORY);
       await window.waitForLoadState('networkidle');
 
-      // Navigate to Drafts and measure load time
       const startTime = Date.now();
       await window.click(SELECTORS.TAB_DRAFTS);
       await window.waitForLoadState('networkidle');

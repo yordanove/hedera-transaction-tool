@@ -47,7 +47,6 @@ test.describe('Ready for Review Performance (Org Mode)', () => {
     registrationPage = new RegistrationPage(window);
     organizationPage = new OrganizationPage(window);
 
-    // Setup org-mode test environment (seed, register, sign in, import mnemonic)
     await setupOrgModeTestEnvironment(window, registrationPage, organizationPage, 'perf-ready-for-review');
   });
 
@@ -57,7 +56,6 @@ test.describe('Ready for Review Performance (Org Mode)', () => {
   });
 
   test('Ready for Review tab should load in under 1 second (p95)', async () => {
-    // Navigate to Transactions page and Ready for Review first
     await window.click(SELECTORS.MENU_TRANSACTIONS);
     await window.waitForLoadState('networkidle');
     await Promise.all([
@@ -71,10 +69,9 @@ test.describe('Ready for Review Performance (Org Mode)', () => {
     ]);
     await window.waitForLoadState('networkidle');
 
-    // Try to set page size if pager exists
     await setPageSize(window, PAGE_SIZE);
 
-    // Validate pager shows sufficient total items (volume enforcement - STRICT)
+    // Volume enforcement - STRICT
     const pagerTotal = await getPagerTotal(window);
     expect(pagerTotal, 'Pager not found - volume enforcement failed').not.toBeNull();
     expect(pagerTotal!, `Pager shows only ${pagerTotal} items, need >= ${REQUIRED_TOTAL}`).toBeGreaterThanOrEqual(REQUIRED_TOTAL);
@@ -85,13 +82,10 @@ test.describe('Ready for Review Performance (Org Mode)', () => {
     expect(initialRowCount, 'No transactions visible - check k6:seed:all and network').toBeGreaterThan(0);
     if (DEBUG) console.log(`Found ${initialRowCount} transactions on Ready for Review tab`);
 
-    // Collect multiple samples for p95
     const samples = await collectPerformanceSamples(async () => {
-      // Navigate away first
       await window.click(SELECTORS.TAB_HISTORY);
       await window.waitForLoadState('networkidle');
 
-      // Measure page load time
       const startTime = Date.now();
       await window.click(SELECTORS.TAB_READY_FOR_REVIEW);
       await window.waitForLoadState('networkidle');

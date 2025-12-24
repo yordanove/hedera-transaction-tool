@@ -22,13 +22,11 @@ export const SELECTORS = {
   TAB_READY_FOR_REVIEW: 'text=Ready for Review',
   TAB_DRAFTS: 'text=Drafts',
 
-  // Row selectors for counting items
   FILE_ROW: '[data-testid^="p-file-id-"]',
   ACCOUNT_ROW: '[data-testid^="p-account-id-"]',
   CONTACT_ROW: '.container-multiple-select',
   BUTTON_DRAFT_CONTINUE: '[data-testid^="button-draft-continue-"]',
 
-  // Sign All / Group selectors
   GROUP_ROW_ICON: 'i.bi-stack',
   BUTTON_DETAILS: 'button:has-text("Details")',
   BUTTON_SIGN_GROUP: '[data-testid="button-sign-group"]',

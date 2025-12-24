@@ -51,9 +51,6 @@ export async function getUserIdByEmail(email: string): Promise<string | null> {
   });
 }
 
-/**
- * Seed TransactionDraft table with test data
- */
 async function seedDrafts(db: sqlite3.Database, userId: string): Promise<number> {
   return new Promise((resolve, reject) => {
     const stmt = db.prepare(`
@@ -87,9 +84,6 @@ async function seedDrafts(db: sqlite3.Database, userId: string): Promise<number>
   });
 }
 
-/**
- * Seed HederaAccount table with test data
- */
 async function seedAccounts(db: sqlite3.Database, userId: string): Promise<number> {
   return new Promise((resolve, reject) => {
     const stmt = db.prepare(`
@@ -123,9 +117,6 @@ async function seedAccounts(db: sqlite3.Database, userId: string): Promise<numbe
   });
 }
 
-/**
- * Seed HederaFile table with test data
- */
 async function seedFiles(db: sqlite3.Database, userId: string): Promise<number> {
   return new Promise((resolve, reject) => {
     const stmt = db.prepare(`
@@ -160,9 +151,6 @@ async function seedFiles(db: sqlite3.Database, userId: string): Promise<number> 
   });
 }
 
-/**
- * Seed all local performance test data
- */
 export async function seedLocalPerfData(userEmail: string): Promise<SeedResult> {
   const userId = await getUserIdByEmail(userEmail);
 
@@ -198,9 +186,6 @@ export async function seedLocalPerfData(userEmail: string): Promise<SeedResult> 
   });
 }
 
-/**
- * Get count of items in a table for a user
- */
 export async function getTableCount(
   tableName: string,
   userId: string,

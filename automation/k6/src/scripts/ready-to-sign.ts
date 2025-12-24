@@ -80,7 +80,6 @@ export default function (data: MultiUserSetupData): void {
       checkName: 'ready-to-sign',
     });
 
-    // Record metrics
     totalDurationTrend.add(result.totalDuration);
     dataVolumeOk.add(result.totalItems >= targetCount);
 

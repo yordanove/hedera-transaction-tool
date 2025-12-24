@@ -12,7 +12,6 @@ import { resetDbState } from '../../utils/databaseUtil.js';
 import { formatDuration } from './performanceUtils.js';
 import { SELECTORS } from './selectors.js';
 
-// Load environment variables from .env file
 dotenv.config();
 
 // TBD - waiting for Hedera to confirm threshold
@@ -30,22 +29,18 @@ test.describe('App Startup Performance', () => {
   test('App startup time should be within threshold', async () => {
     const startTime = Date.now();
 
-    // Launch the Electron app
     const app: ElectronApplication = await electron.launch({
       executablePath: process.env.EXECUTABLE_PATH,
     });
 
-    // Wait for first window
     const window = await app.firstWindow();
     expect(window).not.toBeNull();
 
-    // Wait for app to be interactive
     await window.waitForLoadState('domcontentloaded');
 
     const startupTime = Date.now() - startTime;
     console.log(`App startup time: ${formatDuration(startupTime)}`);
 
-    // Close the app
     await app.close();
 
     const passed = startupTime <= TARGET_STARTUP_TIME_MS;
@@ -65,10 +60,8 @@ test.describe('App Startup Performance', () => {
 
     const window = await app.firstWindow();
 
-    // Wait for networkidle (all resources loaded)
     await window.waitForLoadState('networkidle');
 
-    // Check that UI is actually rendered
     const bodyVisible = await window.locator(SELECTORS.BODY).isVisible();
     expect(bodyVisible).toBe(true);
 

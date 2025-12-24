@@ -22,7 +22,6 @@ import {
 } from './performanceUtils.js';
 import { SELECTORS } from './selectors.js';
 
-// Load environment variables from .env file
 dotenv.config();
 
 // Volume requirement from k6 constants (SSOT)
@@ -50,14 +49,11 @@ test.describe('Contacts Page Performance', () => {
     const testUser = organizationPage.getUser(0);
     if (DEBUG) console.log(`Created ${DB_ITEM_COUNT} users`);
 
-    // Register locally
     const password = 'TestPassword123';
     await registrationPage.completeRegistration(`perf-contacts-${Date.now()}@test.com`, password);
 
-    // Upgrade test user to admin in backend
     await contactListPage.upgradeUserToAdmin(testUser.email);
 
-    // Connect to organization and sign in
     await organizationPage.setupOrganization();
 
     // Wait for sign-in form to appear (organization connection may take time)
@@ -67,25 +63,21 @@ test.describe('Contacts Page Performance', () => {
 
     await organizationPage.signInOrganization(testUser.email, testUser.password, password);
 
-    // Complete Account Setup (required for isLoggedInOrganization() to return true)
+    // Required for isLoggedInOrganization() to return true
     await registrationPage.waitForElementToBeVisible(registrationPage.createNewTabSelector);
     if (DEBUG) console.log('Account Setup screen visible, completing setup...');
 
-    // Generate recovery phrase
     await registrationPage.clickOnCreateNewTab();
     await registrationPage.clickOnUnderstandCheckbox();
     await registrationPage.clickOnGenerateButton();
 
-    // Capture and verify recovery phrase
     await registrationPage.captureRecoveryPhraseWords();
     await registrationPage.clickOnUnderstandCheckbox();
     await registrationPage.clickOnVerifyButton();
 
-    // Fill recovery phrase and complete setup
     await registrationPage.fillAllMissingRecoveryPhraseWords();
     await registrationPage.clickOnNextButton();
 
-    // Wait for toast to clear and finalize
     await registrationPage.waitForElementToDisappear(registrationPage.toastMessageSelector);
     await registrationPage.clickOnFinalNextButtonWithRetry();
     if (DEBUG) console.log('Account Setup completed');
@@ -98,17 +90,13 @@ test.describe('Contacts Page Performance', () => {
   });
 
   test('Contacts page should load in under 1 second (p95)', async () => {
-    // Navigate to Contacts first to verify data and set page size
     await organizationPage.clickOnContactListButton();
     await window.waitForLoadState('networkidle');
 
-    // Collect multiple samples for p95
     const samples = await collectPerformanceSamples(async () => {
-      // Navigate away first
       await window.click(SELECTORS.MENU_TRANSACTIONS);
       await window.waitForLoadState('networkidle');
 
-      // Measure page load time
       const startTime = Date.now();
       await organizationPage.clickOnContactListButton();
       await window.waitForLoadState('networkidle');

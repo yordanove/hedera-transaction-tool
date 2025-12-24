@@ -53,7 +53,6 @@ test.describe('Sign All Performance (Org Mode)', () => {
     registrationPage = new RegistrationPage(window);
     organizationPage = new OrganizationPage(window);
 
-    // Setup org-mode test environment (seed, register, sign in, import mnemonic)
     await setupOrgModeTestEnvironment(window, registrationPage, organizationPage, 'perf-sign-all');
   });
 
@@ -63,56 +62,47 @@ test.describe('Sign All Performance (Org Mode)', () => {
   });
 
   test('Sign All should complete in under 4 seconds', async () => {
-    // Navigate to Transactions > Ready to Sign
     await window.click(SELECTORS.MENU_TRANSACTIONS);
     await window.waitForLoadState('networkidle');
     await window.click(SELECTORS.TAB_READY_TO_SIGN);
 
-    // Wait for the transaction API response
     await window.waitForResponse(
       (res) => res.url().includes('/transactions/sign') || res.url().includes('/transaction-nodes'),
       { timeout: 10000 }
     );
     await window.waitForLoadState('networkidle');
 
-    // Wait for transaction rows to appear
     const rowCount = await waitForRowCount(window, TRANSACTION_ROW_SELECTOR, 1, 5000);
     if (DEBUG) console.log(`Found ${rowCount} transaction rows`);
 
-    // Find a group row using the bi-stack icon (reliable group marker)
+    // bi-stack icon is reliable group marker
     const groupRow = window.locator('tr').filter({ has: window.locator(SELECTORS.GROUP_ROW_ICON) }).first();
     await expect(groupRow, 'No group row found - check seeding').toBeVisible({ timeout: 5000 });
     if (DEBUG) console.log('Found group row with bi-stack icon');
 
-    // Click Details button inside the group row
     const detailsButton = groupRow.locator(SELECTORS.BUTTON_DETAILS);
     await detailsButton.click();
 
-    // Wait for group details page to load
     await window.waitForLoadState('networkidle');
 
-    // Wait for Sign All button to appear on the group details page
     const signAllButton = await window.waitForSelector(SELECTORS.BUTTON_SIGN_GROUP, { timeout: 10000 });
     expect(signAllButton, 'Sign All button not found on group details page').not.toBeNull();
     if (DEBUG) console.log('Found Sign All button on group details page');
 
-    // Count transactions in the group (STRICT: require minimum volume)
+    // STRICT: require minimum volume
     const initialCount = await waitForRowCount(window, TRANSACTION_ROW_SELECTOR, MIN_GROUP_SIZE, 15000);
     expect(initialCount, `Group has ${initialCount} txns, need >= ${MIN_GROUP_SIZE}`).toBeGreaterThanOrEqual(MIN_GROUP_SIZE);
     if (DEBUG) console.log(`Group has ${initialCount} transactions to sign`);
 
-    // Measure time to sign all
     const startTime = Date.now();
 
     await signAllButton.click();
 
-    // Wait for confirmation modal and confirm
     const confirmButton = await window.waitForSelector(SELECTORS.BUTTON_CONFIRM, {
       timeout: 10000,
     });
     await confirmButton.click();
 
-    // Wait for success toast to confirm completion
     await window.waitForSelector(SELECTORS.TOAST_SIGNED_SUCCESS, {
       timeout: 20000,
     });

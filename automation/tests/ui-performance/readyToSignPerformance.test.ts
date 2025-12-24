@@ -47,7 +47,6 @@ test.describe('Ready to Sign Performance (Org Mode)', () => {
     registrationPage = new RegistrationPage(window);
     organizationPage = new OrganizationPage(window);
 
-    // Setup org-mode test environment (seed, register, sign in, import mnemonic)
     await setupOrgModeTestEnvironment(window, registrationPage, organizationPage, 'perf-ready-to-sign');
   });
 
@@ -57,23 +56,20 @@ test.describe('Ready to Sign Performance (Org Mode)', () => {
   });
 
   test('Ready to Sign tab should load in under 1 second (p95)', async () => {
-    // Navigate to Transactions page and Ready to Sign first
     await window.click(SELECTORS.MENU_TRANSACTIONS);
     await window.waitForLoadState('networkidle');
     await window.click(SELECTORS.TAB_READY_TO_SIGN);
 
-    // Wait for the transaction API response (not just networkidle)
-    // This is critical - the page may render before API data arrives
+    // Page may render before API data arrives
     await window.waitForResponse(
       (res) => res.url().includes('/transactions/sign') || res.url().includes('/transaction-nodes'),
       { timeout: 10000 }
     );
     await window.waitForLoadState('networkidle');
 
-    // Try to set page size if pager exists
     await setPageSize(window, PAGE_SIZE);
 
-    // Validate pager shows sufficient total items (volume enforcement - STRICT)
+    // Volume enforcement - STRICT
     const pagerTotal = await getPagerTotal(window);
     expect(pagerTotal, 'Pager not found - volume enforcement failed').not.toBeNull();
     expect(pagerTotal!, `Pager shows only ${pagerTotal} items, need >= ${REQUIRED_TOTAL}`).toBeGreaterThanOrEqual(REQUIRED_TOTAL);
@@ -84,13 +80,10 @@ test.describe('Ready to Sign Performance (Org Mode)', () => {
     expect(initialRowCount, 'No transactions visible - check k6:seed:all and network').toBeGreaterThan(0);
     if (DEBUG) console.log(`Found ${initialRowCount} transactions on Ready to Sign tab`);
 
-    // Collect multiple samples for p95
     const samples = await collectPerformanceSamples(async () => {
-      // Navigate away first
       await window.click(SELECTORS.TAB_HISTORY);
       await window.waitForLoadState('networkidle');
 
-      // Measure page load time
       const startTime = Date.now();
       await window.click(SELECTORS.TAB_READY_TO_SIGN);
       await window.waitForLoadState('networkidle');

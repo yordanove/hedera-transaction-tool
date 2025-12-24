@@ -95,7 +95,6 @@ export default function (data: MultiUserSetupData): void {
         const body = JSON.parse(res.body as string) as PaginatedResponse<Transaction>;
         totalItems += body.items.length;
 
-        // Stop if no more data
         if (body.items.length < PAGINATION.MAX_SIZE) break;
       } catch {
         break;

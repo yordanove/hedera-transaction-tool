@@ -38,12 +38,10 @@ test.describe('Files Page Performance', () => {
     ({ app, window } = await setupApp());
     registrationPage = new RegistrationPage(window);
 
-    // Register and login
     testEmail = `perf-files-${Date.now()}@test.com`;
     const password = 'TestPassword123';
     await registrationPage.completeRegistration(testEmail, password);
 
-    // Seed test data
     const result = await seedLocalPerfData(testEmail);
     seededCount = result.files;
     if (DEBUG) console.log(`Seeded ${seededCount} files for performance test`);
@@ -59,13 +57,10 @@ test.describe('Files Page Performance', () => {
   });
 
   test('Files page should load in under 1 second (p95)', async () => {
-    // Collect multiple samples for p95
     const samples = await collectPerformanceSamples(async () => {
-      // Navigate away first
       await window.click(SELECTORS.MENU_TRANSACTIONS);
       await window.waitForLoadState('networkidle');
 
-      // Measure page load time
       const startTime = Date.now();
       await window.click(SELECTORS.MENU_FILES);
       await window.waitForLoadState('networkidle');

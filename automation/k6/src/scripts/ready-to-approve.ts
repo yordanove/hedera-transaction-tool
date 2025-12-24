@@ -79,7 +79,6 @@ export default function (data: MultiUserSetupData): void {
       return;
     }
 
-    // Parse response and check volume
     try {
       const body = JSON.parse(res.body as string) as { items: unknown[] };
       const itemCount = body.items?.length ?? 0;

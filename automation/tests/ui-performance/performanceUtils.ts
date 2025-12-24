@@ -13,11 +13,10 @@ export { DATA_VOLUMES, THRESHOLDS };
 // Debug mode - enable with DEBUG=true environment variable
 export const DEBUG = process.env.DEBUG === 'true';
 
-// UI-specific constants
 export const TARGET_LOAD_TIME_MS = THRESHOLDS.PAGE_LOAD_MS;
-export const PAGE_SIZE = 50; // Max visible items per page in UI
-export const ROW_WAIT_TIMEOUT_MS = 5000; // Default timeout for waitForRowCount
-export const TRANSACTION_ROW_SELECTOR = '.table-custom tbody tr'; // Transaction table rows
+export const PAGE_SIZE = 50;
+export const ROW_WAIT_TIMEOUT_MS = 5000;
+export const TRANSACTION_ROW_SELECTOR = '.table-custom tbody tr';
 
 export interface PerformanceSamples {
   avg: number;
