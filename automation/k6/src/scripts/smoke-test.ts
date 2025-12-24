@@ -5,11 +5,17 @@
  * Single user, short duration, basic validation.
  */
 
-import http from 'k6/http';
+import http, { setResponseCallback, expectedStatuses } from 'k6/http';
 import { check, sleep } from 'k6';
 import { getBaseUrlWithFallback } from '../config/credentials';
 import { DELAYS, HTTP_STATUS } from '../config/constants';
+import { generateReport } from '../lib/reporter';
+import { formatDataMetrics, needed_properties } from '../lib/utils';
 import type { K6Options, SummaryData, SummaryOutput } from '../types';
+
+// Tell k6 that 200 and 401 are both acceptable responses for this test
+// (401 is expected since we don't authenticate - we just check the API is responding)
+setResponseCallback(expectedStatuses(200, 401));
 
 /**
  * k6 options - smoke test configuration
@@ -45,7 +51,6 @@ export default function (): void {
  * Generate summary report
  */
 export function handleSummary(data: SummaryData): SummaryOutput {
-  return {
-    'k6/reports/smoke-test-summary.json': JSON.stringify(data, null, 2),
-  };
+  formatDataMetrics(data, needed_properties);
+  return generateReport(data, 'smoke-test', 'Smoke Test');
 }

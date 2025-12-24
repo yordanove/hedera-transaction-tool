@@ -8,9 +8,10 @@
 import http from 'k6/http';
 import { check, group, sleep } from 'k6';
 import { Trend, Rate } from 'k6/metrics';
-import { authHeaders, formatDuration } from '../lib/helpers';
+import { authHeaders } from '../lib/helpers';
 import { standardSetup } from '../lib/setup';
 import { formatDataMetrics, needed_properties } from '../lib/utils';
+import { generateReport } from '../lib/reporter';
 import { getBaseUrlWithFallback } from '../config/credentials';
 import { endpoints } from '../config/environments';
 import { THRESHOLDS, DELAYS, HTTP_STATUS, DATA_VOLUMES, PAGINATION } from '../config/constants';
@@ -281,49 +282,9 @@ export default function (data: SetupData): void {
 }
 
 /**
- * Generate text summary for console output
- */
-function generateTextSummary(data: SummaryData): string {
-  let output = '\n=== Tab Load Times Summary ===\n\n';
-
-  const tabMetrics = [
-    { name: 'Ready to Sign', key: 'tab_ready_to_sign_duration' },
-    { name: 'Ready to Approve', key: 'tab_ready_to_approve_duration' },
-    { name: 'In Progress', key: 'tab_in_progress_duration' },
-    { name: 'Ready for Exec', key: 'tab_ready_for_execution_duration' },
-    { name: 'All Transactions', key: 'tab_all_transactions_duration' },
-    { name: 'History', key: 'tab_history_duration' },
-    { name: 'Notifications', key: 'tab_notifications_duration' },
-  ];
-
-  output += '| Tab               | Avg      | P95      | Max      |\n';
-  output += '|-------------------|----------|----------|----------|\n';
-
-  tabMetrics.forEach((tab) => {
-    const metric = data.metrics[tab.key];
-    if (metric?.values) {
-      const v = metric.values;
-      output += `| ${tab.name.padEnd(17)} | ${formatDuration(v.avg).padEnd(8)} | ${formatDuration(v['p(95)']).padEnd(8)} | ${formatDuration(v.max).padEnd(8)} |\n`;
-    }
-  });
-
-  const successRate = data.metrics.tab_load_success;
-  if (successRate?.values) {
-    output += `\nSuccess Rate: ${(successRate.values.rate! * 100).toFixed(2)}%\n`;
-  }
-
-  return output;
-}
-
-/**
  * Generate summary report
  */
 export function handleSummary(data: SummaryData): SummaryOutput {
-  const summary = generateTextSummary(data);
   formatDataMetrics(data, needed_properties);
-
-  return {
-    'k6/reports/tab-load-times-summary.json': JSON.stringify(data, null, 2),
-    stdout: summary,
-  };
+  return generateReport(data, 'tab-load-times', 'Tab Load Times');
 }

@@ -24,32 +24,65 @@ export function formatDataMetrics(
 
 /**
  * Standard metric property mappings for HTML reports
+ * Maps k6 internal metric names to human-readable labels
  */
 export const needed_properties: MetricPropertyMap = {
-  'iteration_duration': 'Iteration Duration',
-  'http_req_waiting': 'HTTP Request Waiting',
-  'http_req_tls_handshaking': 'HTTP Request TLS handshaking',
-  'http_req_sending': 'HTTP Request Sending',
-  'http_req_receiving': 'HTTP Request Receiving',
-  'http_req_duration{name:sign-transaction}': 'HTTP Request Duration Sign Transaction',
-  'http_req_duration{name:ready-to-sign}': 'HTTP Request Duration Ready to Sign',
-  'http_req_duration{name:all-transactions}': 'HTTP Request Duration All Transactions',
-  'http_req_duration{name:history}': 'HTTP Request Duration History',
-  'http_req_duration{name:notifications}': 'HTTP Request Duration Notifications',
-  'http_req_duration{name:ready-to-approve}': 'HTTP Request Duration Ready to Approve',
-  'http_req_duration': 'HTTP Request Duration',
-  'http_req_connecting': 'HTTP Request Connecting',
-  'http_req_blocked': 'HTTP Request Blocked',
-  'group_duration': 'Group Duration',
-  'http_req_failed': 'HTTP Request Failed',
-  'ready-to-sign status 200': 'Ready to Sign status 200',
-  'ready-to-sign response < 1s': 'Ready to Sign Response < 1s',
-  'tab_all_transactions_duration': 'Tab Duration All Transactions',
-  'tab_history_duration': 'Tab Duration History',
-  'tab_notifications_duration': 'Tab Duration Notifications',
-  'tab_ready_to_approve_duration': 'Tab Duration Ready To Approve',
-  'tab_ready_to_sign_duration': 'Tab Duration Ready To Sign',
+  // Core HTTP timing metrics (ms)
+  'http_req_blocked': 'Blocked Time (ms)',
+  'http_req_connecting': 'Connection Time (ms)',
+  'http_req_duration': 'Total Request Time (ms)',
+  'http_req_receiving': 'Download Time (ms)',
+  'http_req_sending': 'Upload Time (ms)',
+  'http_req_tls_handshaking': 'TLS Handshake (ms)',
+  'http_req_waiting': 'Server Wait Time / TTFB (ms)',
+  'http_req_failed': 'Failed Requests',
+
+  // Tagged HTTP durations per-endpoint (ms)
+  'http_req_duration{name:sign-transaction}': 'Sign Transaction Time (ms)',
+  'http_req_duration{name:ready-to-sign}': 'Ready to Sign Time (ms)',
+  'http_req_duration{name:all-transactions}': 'All Transactions Time (ms)',
+  'http_req_duration{name:history}': 'History Time (ms)',
+  'http_req_duration{name:notifications}': 'Notifications Time (ms)',
+  'http_req_duration{name:ready-to-approve}': 'Ready to Approve Time (ms)',
+
+  // Test execution metrics (ms)
+  'iteration_duration': 'Iteration Duration (ms)',
+  'group_duration': 'Group Duration (ms)',
+
+  // Tab performance metrics (ms)
+  'tab_ready_to_sign_duration': 'Ready to Sign Tab (ms)',
+  'tab_ready_to_approve_duration': 'Ready to Approve Tab (ms)',
+  'tab_in_progress_duration': 'In Progress Tab (ms)',
+  'tab_ready_for_execution_duration': 'Ready for Execution Tab (ms)',
+  'tab_all_transactions_duration': 'All Transactions Tab (ms)',
+  'tab_history_duration': 'History Tab (ms)',
+  'tab_notifications_duration': 'Notifications Tab (ms)',
+  'tab_ready_to_sign_total_duration': 'Ready to Sign Total (ms)',
+  'tab_history_total_duration': 'History Total (ms)',
+  'tab_ready_to_sign_volume_ok': 'Ready to Sign Volume OK',
+  'tab_history_volume_ok': 'History Volume OK',
   'tab_load_success': 'Tab Load Success',
+
+  // Sign All metrics
+  'sign_all_duration': 'Sign All Duration (ms)',
+  'upload_signature_duration': 'Upload Signature Time (ms)',
+  'transactions_processed': 'Transactions Processed',
+  'upload_success_rate': 'Upload Success Rate',
+
+  // History metrics
+  'history_total_duration': 'History Total Duration (ms)',
+  'history_data_volume_ok': 'History Data Volume OK',
+
+  // Ready to Sign metrics
+  'ready_to_sign_total_duration': 'Ready to Sign Total Duration (ms)',
+  'ready_to_sign_data_volume_ok': 'Ready to Sign Data Volume OK',
+
+  // Ready to Approve metrics
+  'ready_to_approve_data_volume_ok': 'Ready to Approve Data Volume OK',
+
+  // Check results
+  'ready-to-sign status 200': 'Ready to Sign Status OK',
+  'ready-to-sign response < 1s': 'Ready to Sign Under 1s',
 };
 
 /**

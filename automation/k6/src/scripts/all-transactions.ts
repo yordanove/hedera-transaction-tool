@@ -10,7 +10,8 @@ import http from 'k6/http';
 import { check, sleep, group } from 'k6';
 import { authHeaders, formatDuration } from '../lib/helpers';
 import { multiUserSetup, getTokenForVU } from '../lib/setup';
-import { formatDataMetrics, needed_properties, textSummary } from '../lib/utils';
+import { formatDataMetrics, needed_properties } from '../lib/utils';
+import { generateReport } from '../lib/reporter';
 import { getBaseUrlWithFallback } from '../config/credentials';
 import { endpoints } from '../config/environments';
 import { THRESHOLDS, DELAYS, HTTP_STATUS } from '../config/constants';
@@ -78,9 +79,5 @@ export default function (data: MultiUserSetupData): void {
  */
 export function handleSummary(data: SummaryData): SummaryOutput {
   formatDataMetrics(data, needed_properties);
-
-  return {
-    'k6/reports/all-transactions.json': JSON.stringify(data, null, 2),
-    stdout: textSummary(data, 'All Transactions'),
-  };
+  return generateReport(data, 'all-transactions', 'All Transactions');
 }

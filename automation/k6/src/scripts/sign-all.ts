@@ -14,6 +14,8 @@ import http from 'k6/http';
 import { check, group, fail } from 'k6';
 import { Trend, Counter, Rate } from 'k6/metrics';
 import { authHeaders, formatDuration } from '../lib/helpers';
+import { generateReport } from '../lib/reporter';
+import { formatDataMetrics, needed_properties } from '../lib/utils';
 import { standardSetup } from '../lib/setup';
 import { getBaseUrlWithFallback } from '../config/credentials';
 import { DATA_VOLUMES, THRESHOLDS, HTTP_STATUS, PAGINATION, SIGNATURE_MODES } from '../config/constants';
@@ -310,48 +312,9 @@ export default function (data: SetupData): void {
 }
 
 /**
- * Generate text summary for console output
- */
-function generateTextSummary(data: SummaryData): string {
-  let output = '\n=== Sign All Transactions Summary ===\n\n';
-
-  const signAll = data.metrics.sign_all_duration;
-  if (signAll?.values) {
-    output += `Total Batch Duration:\n`;
-    output += `  Value: ${formatDuration(signAll.values.avg)}\n`;
-    output += `  Target: ${formatDuration(THRESHOLDS.SIGN_ALL_MS)}\n`;
-    output += `  Status: ${signAll.values.avg <= THRESHOLDS.SIGN_ALL_MS ? 'PASS' : 'FAIL'}\n\n`;
-  }
-
-  const uploadDur = data.metrics.upload_signature_duration;
-  if (uploadDur?.values) {
-    output += `Per-Transaction Duration:\n`;
-    output += `  Avg: ${formatDuration(uploadDur.values.avg)}\n`;
-    output += `  P95: ${formatDuration(uploadDur.values['p(95)'])}\n`;
-    output += `  Max: ${formatDuration(uploadDur.values.max)}\n\n`;
-  }
-
-  const processed = data.metrics.transactions_processed;
-  if (processed?.values) {
-    output += `Transactions Processed: ${processed.values.count}\n`;
-  }
-
-  const successRate = data.metrics.upload_success_rate;
-  if (successRate?.values) {
-    output += `Success Rate: ${(successRate.values.rate! * 100).toFixed(2)}%\n`;
-  }
-
-  return output;
-}
-
-/**
  * Generate summary report
  */
 export function handleSummary(data: SummaryData): SummaryOutput {
-  const summary = generateTextSummary(data);
-
-  return {
-    'k6/reports/sign-all-summary.json': JSON.stringify(data, null, 2),
-    stdout: summary,
-  };
+  formatDataMetrics(data, needed_properties);
+  return generateReport(data, 'sign-all', 'Sign All Transactions');
 }

@@ -10,7 +10,8 @@ import { check, sleep, group } from 'k6';
 import { Trend, Rate } from 'k6/metrics';
 import { authHeaders, formatDuration } from '../lib/helpers';
 import { multiUserSetup, getTokenForVU } from '../lib/setup';
-import { formatDataMetrics, needed_properties, textSummary } from '../lib/utils';
+import { formatDataMetrics, needed_properties } from '../lib/utils';
+import { generateReport } from '../lib/reporter';
 import { fetchPaginated } from '../lib/pagination';
 import { getBaseUrlWithFallback } from '../config/credentials';
 import { DATA_VOLUMES, THRESHOLDS, DELAYS } from '../config/constants';
@@ -100,9 +101,5 @@ export default function (data: MultiUserSetupData): void {
  */
 export function handleSummary(data: SummaryData): SummaryOutput {
   formatDataMetrics(data, needed_properties);
-
-  return {
-    'k6/reports/ready-to-sign.json': JSON.stringify(data, null, 2),
-    stdout: textSummary(data, 'Ready to Sign'),
-  };
+  return generateReport(data, 'ready-to-sign', 'Ready to Sign');
 }
