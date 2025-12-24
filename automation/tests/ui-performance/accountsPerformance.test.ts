@@ -20,11 +20,11 @@ import {
   DATA_VOLUMES,
   DEBUG,
 } from './performanceUtils.js';
+import { SELECTORS } from './selectors.js';
 
 // Volume requirement from k6 constants (SSOT)
 const DB_ITEM_COUNT = DATA_VOLUMES.ACCOUNTS;
 const MIN_ROWS = 50; // Strict: require at least 50 rows rendered
-const ACCOUNT_ROW_SELECTOR = '[data-testid^="p-account-id-"]';
 
 let app: ElectronApplication;
 let window: Page;
@@ -62,17 +62,17 @@ test.describe('Accounts Page Performance', () => {
     // Collect multiple samples for p95
     const samples = await collectPerformanceSamples(async () => {
       // Navigate away first
-      await window.click('[data-testid="button-menu-transactions"]');
+      await window.click(SELECTORS.MENU_TRANSACTIONS);
       await window.waitForLoadState('networkidle');
 
       // Measure page load time
       const startTime = Date.now();
-      await window.click('[data-testid="button-menu-accounts"]');
+      await window.click(SELECTORS.MENU_ACCOUNTS);
       await window.waitForLoadState('networkidle');
       const loadTime = Date.now() - startTime;
 
       // Verify rows rendered (STRICT: require minimum volume)
-      const rowCount = await waitForRowCount(window, ACCOUNT_ROW_SELECTOR, MIN_ROWS, 5000);
+      const rowCount = await waitForRowCount(window, SELECTORS.ACCOUNT_ROW, MIN_ROWS, 5000);
       expect(rowCount, `Only ${rowCount} accounts rendered, need >= ${MIN_ROWS}`).toBeGreaterThanOrEqual(MIN_ROWS);
 
       return loadTime;

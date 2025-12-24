@@ -10,6 +10,7 @@ import { _electron as electron } from 'playwright';
 import * as dotenv from 'dotenv';
 import { resetDbState } from '../../utils/databaseUtil.js';
 import { formatDuration } from './performanceUtils.js';
+import { SELECTORS } from './selectors.js';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -68,7 +69,7 @@ test.describe('App Startup Performance', () => {
     await window.waitForLoadState('networkidle');
 
     // Check that UI is actually rendered
-    const bodyVisible = await window.locator('body').isVisible();
+    const bodyVisible = await window.locator(SELECTORS.BODY).isVisible();
     expect(bodyVisible).toBe(true);
 
     const interactiveTime = Date.now() - startTime;

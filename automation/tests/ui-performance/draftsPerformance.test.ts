@@ -28,7 +28,6 @@ import { SELECTORS } from './selectors.js';
 // Volume requirement from k6 constants (SSOT)
 const DB_ITEM_COUNT = DATA_VOLUMES.DRAFTS;
 const REQUIRED_TOTAL = DATA_VOLUMES.DRAFTS;
-const DRAFT_ROW_SELECTOR = '[data-testid^="button-draft-continue-"]'; // One per row
 
 let app: ElectronApplication;
 let window: Page;
@@ -93,7 +92,7 @@ test.describe('Drafts Page Performance', () => {
       const loadTime = Date.now() - startTime;
 
       // Verify some drafts rendered (hard fail if empty)
-      const rowCount = await waitForRowCount(window, DRAFT_ROW_SELECTOR, 1, 5000);
+      const rowCount = await waitForRowCount(window, SELECTORS.BUTTON_DRAFT_CONTINUE, 1, 5000);
       expect(rowCount, 'No drafts rendered - check seeding').toBeGreaterThan(0);
 
       return loadTime;

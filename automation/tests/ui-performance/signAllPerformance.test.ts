@@ -80,19 +80,19 @@ test.describe('Sign All Performance (Org Mode)', () => {
     if (DEBUG) console.log(`Found ${rowCount} transaction rows`);
 
     // Find a group row using the bi-stack icon (reliable group marker)
-    const groupRow = window.locator('tr').filter({ has: window.locator('i.bi-stack') }).first();
+    const groupRow = window.locator('tr').filter({ has: window.locator(SELECTORS.GROUP_ROW_ICON) }).first();
     await expect(groupRow, 'No group row found - check seeding').toBeVisible({ timeout: 5000 });
     if (DEBUG) console.log('Found group row with bi-stack icon');
 
     // Click Details button inside the group row
-    const detailsButton = groupRow.locator('button:has-text("Details")');
+    const detailsButton = groupRow.locator(SELECTORS.BUTTON_DETAILS);
     await detailsButton.click();
 
     // Wait for group details page to load
     await window.waitForLoadState('networkidle');
 
     // Wait for Sign All button to appear on the group details page
-    const signAllButton = await window.waitForSelector('[data-testid="button-sign-group"]', { timeout: 10000 });
+    const signAllButton = await window.waitForSelector(SELECTORS.BUTTON_SIGN_GROUP, { timeout: 10000 });
     expect(signAllButton, 'Sign All button not found on group details page').not.toBeNull();
     if (DEBUG) console.log('Found Sign All button on group details page');
 
@@ -107,13 +107,13 @@ test.describe('Sign All Performance (Org Mode)', () => {
     await signAllButton.click();
 
     // Wait for confirmation modal and confirm
-    const confirmButton = await window.waitForSelector('button:has-text("Confirm")', {
+    const confirmButton = await window.waitForSelector(SELECTORS.BUTTON_CONFIRM, {
       timeout: 10000,
     });
     await confirmButton.click();
 
     // Wait for success toast to confirm completion
-    await window.waitForSelector('.v-toast__text:has-text("Transactions signed successfully")', {
+    await window.waitForSelector(SELECTORS.TOAST_SIGNED_SUCCESS, {
       timeout: 20000,
     });
 
