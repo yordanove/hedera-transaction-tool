@@ -20,6 +20,8 @@ export const SELECTORS = {
   TAB_HISTORY: 'text=History',
   TAB_READY_TO_SIGN: 'text=Ready to Sign',
   TAB_READY_FOR_REVIEW: 'text=Ready for Review',
+  TAB_IN_PROGRESS: 'text=In Progress',
+  TAB_READY_FOR_EXECUTION: 'text=Ready for Execution',
   TAB_DRAFTS: 'text=Drafts',
 
   FILE_ROW: '[data-testid^="p-file-id-"]',

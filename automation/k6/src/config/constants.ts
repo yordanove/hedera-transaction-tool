@@ -28,6 +28,7 @@ export const DATA_VOLUMES = {
   FILES: 100,
   HISTORY: 500, // Requires 5 pages
   GROUP_SIZE: 100, // Transactions per group for Sign All testing
+  READY_FOR_EXECUTION: 100, // Transactions ready to submit to Hedera
 };
 
 /**

@@ -52,6 +52,7 @@ const SIGN_COUNT = DATA_VOLUMES.READY_TO_SIGN;
 const HISTORY_COUNT = DATA_VOLUMES.HISTORY;
 const APPROVE_COUNT = DATA_VOLUMES.READY_FOR_REVIEW;
 const GROUP_SIZE = DATA_VOLUMES.GROUP_SIZE;
+const EXECUTION_COUNT = DATA_VOLUMES.READY_FOR_EXECUTION;
 const DEBUG = process.env.DEBUG === 'true';
 
 interface UserRow {
@@ -686,6 +687,38 @@ async function seedTransactionGroups(
 }
 
 /**
+ * Seed transactions with WAITING FOR EXECUTION status
+ * These appear in the "Ready for Execution" tab
+ */
+async function seedReadyForExecutionTransactions(
+  client: Client,
+  userKeyId: number,
+): Promise<void> {
+  console.log(`\nSeeding ${EXECUTION_COUNT} transactions for Ready for Execution tab...`);
+  console.log('  (Using real Hedera SDK transactions)');
+
+  // Calculate offset to avoid ID collisions with other seeded transactions
+  const indexOffset = SIGN_COUNT + HISTORY_COUNT + APPROVE_COUNT + GROUP_SIZE;
+
+  for (let i = 0; i < EXECUTION_COUNT; i++) {
+    await insertTransaction({
+      client,
+      index: indexOffset + i,
+      status: 'WAITING FOR EXECUTION',
+      creatorKeyId: userKeyId,
+      useRealTx: true,
+      descriptionSuffix: `execution-${i}`,
+    });
+
+    if ((i + 1) % 25 === 0) {
+      console.log(`  Created ${i + 1}/${EXECUTION_COUNT} execution transactions`);
+    }
+  }
+
+  console.log(`  Completed: ${EXECUTION_COUNT} Ready for Execution transactions`);
+}
+
+/**
  * Convert SDK SignatureMap to backend JSON format using public iterators
  * Backend expects: { nodeAccountId: { transactionId: { derPublicKey: "0x" + signatureHex }}}
  */
@@ -806,6 +839,12 @@ async function validateSeededData(client: Client): Promise<void> {
       params: [`${SEED_MARKER}%`],
       expected: 1,
     },
+    {
+      name: 'Ready for Execution transactions',
+      query: `SELECT COUNT(*) as count FROM "transaction" WHERE description LIKE $1 AND status = 'WAITING FOR EXECUTION'`,
+      params: [`${SEED_MARKER}%`],
+      expected: EXECUTION_COUNT,
+    },
   ];
 
   let allPassed = true;
@@ -858,6 +897,7 @@ async function seedDataForUser(client: Client, email: string): Promise<void> {
   await seedHistoryTransactions(client, userKeyId);
   await seedApproveTransactions(client, userId, userKeyId);
   await seedTransactionGroups(client, userKeyId);
+  await seedReadyForExecutionTransactions(client, userKeyId);
 }
 
 async function seedData(): Promise<void> {
