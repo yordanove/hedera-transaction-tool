@@ -29,6 +29,7 @@ These tests measure **frontend/UI performance**:
 | `draftsPerformance.test.ts` | Drafts tab load time | 100 items | < 1 second (p95) |
 | `accountsPerformance.test.ts` | Accounts page load time | 100 items | < 1 second (p95) |
 | `filesPerformance.test.ts` | Files page load time | 100 items | < 1 second (p95) |
+| `historyPerformanceLocal.test.ts` | History tab load time (local) | 500 txns | < 1 second (p95) |
 
 ### Org Mode Tests (PostgreSQL)
 | Test | What It Measures | Data Volume | Threshold |
@@ -51,6 +52,7 @@ cd automation
 npx playwright test tests/ui-performance/draftsPerformance.test.ts
 npx playwright test tests/ui-performance/accountsPerformance.test.ts
 npx playwright test tests/ui-performance/filesPerformance.test.ts
+npx playwright test tests/ui-performance/historyPerformanceLocal.test.ts
 
 # Org mode tests (requires backend + seeding)
 npm run k6:seed:all  # Seed backend with test data
@@ -80,10 +82,11 @@ npx playwright test tests/ui-performance/historyPerformance.test.ts
 ## Data Seeding
 
 ### Local Mode
-Tests use `seed-local-perf-data.ts` to insert 100 items each into:
-- TransactionDraft
-- HederaAccount
-- HederaFile
+Tests use `seed-local-perf-data.ts` to insert into SQLite:
+- 100 TransactionDraft records
+- 100 HederaAccount records
+- 100 HederaFile records
+- 500 Transaction records (for local History)
 
 ### Org Mode
 Tests use `npm run k6:seed:all` which creates:
