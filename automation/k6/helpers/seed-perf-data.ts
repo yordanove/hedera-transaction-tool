@@ -812,7 +812,7 @@ async function validateSeededData(client: Client): Promise<void> {
     {
       name: 'Sign transactions',
       query: `SELECT COUNT(*) as count FROM "transaction" WHERE description LIKE $1 AND status = 'WAITING FOR SIGNATURES' AND description NOT LIKE $2`,
-      params: [`${SEED_MARKER}%`, `${SEED_MARKER}-group%`],
+      params: [`${SEED_MARKER}%`, `%group-item%`],
       expected: SIGN_COUNT + APPROVE_COUNT, // Both types are WAITING FOR SIGNATURES
     },
     {
