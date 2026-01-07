@@ -17,28 +17,29 @@ export const SELECTORS = {
   MENU_FILES: '[data-testid="button-menu-files"]',
 
   // Transaction tabs (text-based - fragile, needs frontend data-testid)
-  TAB_HISTORY: 'text=History',
-  TAB_READY_TO_SIGN: 'text=Ready to Sign',
-  TAB_READY_FOR_REVIEW: 'text=Ready for Review',
-  TAB_IN_PROGRESS: 'text=In Progress',
-  TAB_READY_FOR_EXECUTION: 'text=Ready for Execution',
-  TAB_DRAFTS: 'text=Drafts',
+  PERSONAL_TAB_HISTORY: '[data-testid="tab-1"]',
+  TAB_HISTORY: '[data-testid="tab-5"]',
+  TAB_READY_TO_SIGN: '[data-testid="tab-2"]',
+  TAB_READY_FOR_REVIEW: '[data-testid="tab-1"]',
+  TAB_IN_PROGRESS: '[data-testid="tab-3"]',
+  TAB_READY_FOR_EXECUTION: '[data-testid="tab-4"]',
+  TAB_DRAFTS: '[data-testid="tab-0"]',
 
   FILE_ROW: '[data-testid^="p-file-id-"]',
   ACCOUNT_ROW: '[data-testid^="p-account-id-"]',
   CONTACT_ROW: '.container-multiple-select',
   BUTTON_DRAFT_CONTINUE: '[data-testid^="button-draft-continue-"]',
 
-  GROUP_ROW_ICON: 'i.bi-stack',
+  GROUP_ROW_ICON: '.table-custom .bi-stack',
   BUTTON_DETAILS: 'button:has-text("Details")',
   BUTTON_SIGN_GROUP: '[data-testid="button-sign-group"]',
   BUTTON_CONFIRM: 'button:has-text("Confirm")',
-  TOAST_SIGNED_SUCCESS: '.v-toast__text:has-text("Transactions signed successfully")',
+  TOAST_SIGNED_SUCCESS: '.v-toast__item--success .v-toast__text',
 
   // Loading indicators
   SPINNER_LOADING: '.spinner-border',
 
   // Pager elements (class-based - fragile, needs frontend data-testid)
-  PAGER_SELECT: '.pager-per-page select',
+  PAGER_SELECT: '.pager-per-page',
   PAGER_ITEMS: '.pager-shown-items',
 };

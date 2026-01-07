@@ -64,7 +64,7 @@ test.describe('History Page Performance (Local Mode)', () => {
     await window.waitForLoadState('networkidle');
 
     // Go to History tab
-    await window.click(SELECTORS.TAB_HISTORY);
+    await window.click(SELECTORS.PERSONAL_TAB_HISTORY);
     await window.waitForLoadState('networkidle');
 
     // Verify data is visible before benchmarking
@@ -83,7 +83,7 @@ test.describe('History Page Performance (Local Mode)', () => {
 
       // Measure time to switch back to History
       const startTime = Date.now();
-      await window.click(SELECTORS.TAB_HISTORY);
+      await window.click(SELECTORS.PERSONAL_TAB_HISTORY);
       await window.waitForLoadState('networkidle');
       const loadTime = Date.now() - startTime;
 
