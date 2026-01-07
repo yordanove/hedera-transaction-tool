@@ -26,7 +26,7 @@ import {
   DATA_VOLUMES,
 } from './performanceUtils.js';
 import { SELECTORS } from './selectors.js';
-import { setupOrgModeTestEnvironment } from './seed-org-perf-data.js';
+import { setupOrgModeTestEnvironment, refreshCachedAccountTimestamp } from './seed-org-perf-data.js';
 
 dotenv.config();
 
@@ -54,7 +54,8 @@ test.describe('Ready to Sign Performance (Org Mode)', () => {
   });
 
   test('Ready to Sign tab should load in under 1 second (p95)', async () => {
-    await navigateToReadyToSign(window);
+    // Pass cache refresh to navigateToReadyToSign - called RIGHT BEFORE API call
+    await navigateToReadyToSign(window, refreshCachedAccountTimestamp);
     await enforceVolumeRequirement(window, REQUIRED_TOTAL, 'Ready to Sign');
 
     const samples = await collectPerformanceSamples(async () => {

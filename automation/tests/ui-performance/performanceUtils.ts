@@ -154,11 +154,26 @@ export async function enforceVolumeRequirement(
 }
 
 /**
- * Navigate to Ready to Sign tab and wait for data to load
+ * Navigate to Ready to Sign tab and wait for data to load.
+ *
+ * @param window - Playwright page
+ * @param refreshCache - Optional function to refresh the cached account RIGHT BEFORE the API call.
+ *                       This is critical because the backend has a 10s TTL and the cache can be
+ *                       overwritten by Mirror Node if we refresh too early.
  */
-export async function navigateToReadyToSign(window: Page): Promise<void> {
+export async function navigateToReadyToSign(
+  window: Page,
+  refreshCache?: () => Promise<void>,
+): Promise<void> {
   await window.click(SELECTORS.MENU_TRANSACTIONS);
   await window.waitForLoadState('networkidle');
+
+  // Refresh cache RIGHT BEFORE clicking the tab (which triggers the API call)
+  // This minimizes the window for Mirror Node to overwrite our test key
+  if (refreshCache) {
+    await refreshCache();
+  }
+
   await window.click(SELECTORS.TAB_READY_TO_SIGN);
 
   await window.waitForResponse(

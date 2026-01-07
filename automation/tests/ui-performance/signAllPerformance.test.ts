@@ -35,7 +35,7 @@ import {
   DEBUG,
 } from './performanceUtils.js';
 import { SELECTORS } from './selectors.js';
-import { setupOrgModeTestEnvironment } from './seed-org-perf-data.js';
+import { setupOrgModeTestEnvironment, refreshCachedAccountTimestamp } from './seed-org-perf-data.js';
 
 dotenv.config();
 
@@ -64,7 +64,9 @@ test.describe('Sign All Performance (Org Mode)', () => {
   });
 
   test('Sign All should complete in under 4 seconds', async () => {
-    await navigateToReadyToSign(window);
+    // Pass cache refresh to navigateToReadyToSign - it will be called RIGHT BEFORE
+    // clicking the Ready to Sign tab to minimize the window for Mirror Node override
+    await navigateToReadyToSign(window, refreshCachedAccountTimestamp);
 
     const groupRow = await waitForGroupRow(window);
 

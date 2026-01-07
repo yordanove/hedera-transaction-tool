@@ -13,7 +13,7 @@
 import { test, expect, ElectronApplication, Page } from '@playwright/test';
 import * as dotenv from 'dotenv';
 import { setupApp, closeApp } from '../../utils/util.js';
-import { resetDbState } from '../../utils/databaseUtil.js';
+import { resetDbState, resetPostgresDbState } from '../../utils/databaseUtil.js';
 import { RegistrationPage } from '../../pages/RegistrationPage.js';
 import { OrganizationPage } from '../../pages/OrganizationPage.js';
 import {
@@ -26,6 +26,7 @@ import {
 import { SELECTORS } from './selectors.js';
 import {
   setupComplexKeyTestEnvironment,
+  refreshCachedAccountTimestamp,
   type ComplexKeySetupResult,
 } from './seed-org-perf-data.js';
 
@@ -82,6 +83,7 @@ test.describe('Sign All with Complex Threshold Keys (Org Mode)', () => {
     validateStagingConfig();
 
     await resetDbState();
+    await resetPostgresDbState();
     ({ app, window } = await setupApp());
     registrationPage = new RegistrationPage(window);
     organizationPage = new OrganizationPage(window);
@@ -104,6 +106,7 @@ test.describe('Sign All with Complex Threshold Keys (Org Mode)', () => {
       await closeApp(app);
     }
     await resetDbState();
+    await resetPostgresDbState();
   });
 
   test('Sign All with complex threshold key completes in under 4 seconds', async () => {
@@ -116,7 +119,8 @@ test.describe('Sign All with Complex Threshold Keys (Org Mode)', () => {
       console.log(`Structure: THRESHOLD (${complexKey.metadata.parentThreshold} of ${complexKey.metadata.childCount})`);
     }
 
-    await navigateToReadyToSign(window);
+    // Pass cache refresh to navigateToReadyToSign - called RIGHT BEFORE API call
+    await navigateToReadyToSign(window, refreshCachedAccountTimestamp);
 
     const groupRow = await waitForGroupRow(window);
 

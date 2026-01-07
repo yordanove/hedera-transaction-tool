@@ -34,6 +34,9 @@ import { encrypt, argonHash } from '../../utils/crypto.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Mirror network - parameterized for staging (testnet) vs local/prod (mainnet)
+const MIRROR_NETWORK = process.env.HEDERA_NETWORK === 'testnet' ? 'testnet' : 'mainnet';
+
 /**
  * Detect if running on staging environment.
  * Staging is identified by HEDERA_NETWORK=testnet or ORGANIZATION_URL containing 'staging'.
@@ -316,6 +319,64 @@ function createPgClient(): Client {
     user: process.env.POSTGRES_USERNAME || 'postgres',
     password: process.env.POSTGRES_PASSWORD || 'postgres',
   });
+}
+
+/**
+ * Refresh the CachedAccount with the correct test key.
+ *
+ * The backend has a 10-second TTL for cached accounts. If more than 10s passes
+ * between seeding and the Ready to Sign request, the cache expires and the
+ * backend refreshes from Mirror Node, overwriting our test key with Hedera's.
+ *
+ * This function:
+ * 1. Reads the test mnemonic from disk
+ * 2. Derives the public key
+ * 3. Re-inserts the cached_account with the correct key and fresh timestamp
+ *
+ * Call this RIGHT BEFORE navigating to Ready to Sign tab.
+ *
+ * @param client - Connected PostgreSQL client (or creates one if not provided)
+ */
+export async function refreshCachedAccountTimestamp(client?: Client): Promise<void> {
+  const shouldClose = !client;
+  const pgClient = client || createPgClient();
+
+  try {
+    if (!client) {
+      await pgClient.connect();
+    }
+
+    // Read the test mnemonic and derive the public key
+    const { Mnemonic } = await import('@hashgraph/sdk');
+    const { proto } = await import('@hashgraph/proto');
+
+    const mnemonicWords = readSeedMnemonic();
+    const mnemonic = await Mnemonic.fromString(mnemonicWords.join(' '));
+    const privateKey = await mnemonic.toStandardEd25519PrivateKey();
+    const publicKey = privateKey.publicKey;
+
+    // Serialize to protobuf
+    const protoKey = (publicKey as unknown as { _toProtobufKey: () => unknown })._toProtobufKey();
+    const encodedKey = Buffer.from(proto.Key.encode(protoKey as Parameters<typeof proto.Key.encode>[0]).finish());
+
+    // Delete and re-insert with correct key
+    await pgClient.query(
+      `DELETE FROM cached_account WHERE account = $1 AND "mirrorNetwork" = $2`,
+      ['0.0.2', MIRROR_NETWORK],
+    );
+
+    await pgClient.query(
+      `INSERT INTO cached_account (account, "mirrorNetwork", "encodedKey", "lastCheckedAt", "receiverSignatureRequired", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, NOW(), false, NOW(), NOW())`,
+      ['0.0.2', MIRROR_NETWORK, encodedKey],
+    );
+
+    if (DEBUG) console.log(`✓ Refreshed CachedAccount for 0.0.2 with key ${publicKey.toStringRaw().slice(0, 16)}...`);
+  } finally {
+    if (shouldClose) {
+      await pgClient.end();
+    }
+  }
 }
 
 /**

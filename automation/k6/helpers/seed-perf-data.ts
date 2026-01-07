@@ -38,9 +38,13 @@ import {
   type ComplexKeyResult,
   type ComplexKeyJson,
 } from './complex-keys.js';
+import { proto } from '@hashgraph/proto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Mirror network - parameterized for staging (testnet) vs local/prod (mainnet)
+const MIRROR_NETWORK = process.env.HEDERA_NETWORK === 'testnet' ? 'testnet' : 'mainnet';
 
 // Generated keypair for signing - stored in user_key table
 let testPrivateKey: PrivateKey;
@@ -75,6 +79,51 @@ interface SignTransactionData {
 const HISTORY_STATUSES = ['EXECUTED', 'FAILED', 'EXPIRED', 'CANCELED', 'ARCHIVED'] as const;
 
 const signTransactionsData: SignTransactionData[] = [];
+
+/**
+ * Serialize a public key to protobuf format (same as backend's serializeKey)
+ * This matches back-end/libs/common/src/utils/sdk/key.ts:48-51
+ */
+function serializeKeyToProtobuf(key: { _toProtobufKey: () => proto.IKey }): Buffer {
+  const protoKey = key._toProtobufKey();
+  return Buffer.from(proto.Key.encode(protoKey).finish());
+}
+
+/**
+ * Seed CachedAccount with test public key so Mirror Node is not queried.
+ * This makes the fee payer (0.0.2) resolve to our test key instead of real mainnet key.
+ *
+ * The backend checks CachedAccount first - if encodedKey exists and lastCheckedAt
+ * is fresh (< 10s), it returns cached data without calling Mirror Node.
+ */
+async function seedCachedAccount(client: Client, publicKeyHex: string): Promise<void> {
+  const accountId = '0.0.2'; // Fee payer used in transactions
+  const mirrorNetwork = MIRROR_NETWORK;
+
+  // Delete existing cached account if present
+  await client.query(
+    `DELETE FROM cached_account WHERE account = $1 AND "mirrorNetwork" = $2`,
+    [accountId, mirrorNetwork],
+  );
+
+  // Create PublicKey from hex and serialize to protobuf
+  // Import PublicKey from sdk to create the key object
+  const { PublicKey } = await import('@hashgraph/sdk');
+  const publicKey = PublicKey.fromString(publicKeyHex);
+  const encodedKey = serializeKeyToProtobuf(publicKey as any);
+
+  // Insert cached account with test public key
+  await client.query(
+    `INSERT INTO cached_account (
+       account, "mirrorNetwork", "encodedKey", "lastCheckedAt",
+       "receiverSignatureRequired", "createdAt", "updatedAt"
+     )
+     VALUES ($1, $2, $3, NOW(), false, NOW(), NOW())`,
+    [accountId, mirrorNetwork, encodedKey],
+  );
+
+  console.log(`✓ Seeded CachedAccount: ${accountId} with test public key (${publicKeyHex.substring(0, 16)}...)`);
+}
 
 const DEFAULT_EMAIL = 'k6perf@test.com';
 
@@ -208,6 +257,10 @@ export function generateAndSaveComplexKeys(useHederaStyle: boolean = false): Com
  * @param complexKey - ComplexKeyResult with the threshold key structure
  * @returns Transaction data including bytes and IDs
  */
+// Offset for complex key transactions (must be MORE negative than regular group's -3600)
+// This ensures complex key group appears on page 1 before regular group with ASC sorting
+const COMPLEX_KEY_TIMESTAMP_OFFSET_SECONDS = -7200; // 2 hours in the past
+
 function createComplexKeyTransaction(
   index: number,
   complexKey: ComplexKeyResult,
@@ -220,6 +273,8 @@ function createComplexKeyTransaction(
   signature: Buffer;
 } {
   const now = new Date();
+  // Apply offset so complex key transactions sort before regular group transactions
+  const validStart = new Date(now.getTime() + COMPLEX_KEY_TIMESTAMP_OFFSET_SECONDS * 1000);
 
   // Create FileCreateTransaction with complex key as file key
   // This means signing requires satisfying the threshold structure
@@ -242,7 +297,7 @@ function createComplexKeyTransaction(
     unsignedTransactionBytes: Buffer.from(unsignedBytes),
     transactionId: txId,
     transactionHash: txHash,
-    validStart: now,
+    validStart: validStart,
     signature: Buffer.alloc(0),
   };
 }
@@ -301,7 +356,7 @@ export async function seedComplexKeyTransactions(
         creatorKeyId,
         txData.signature,
         txData.validStart,
-        'mainnet',
+        MIRROR_NETWORK,
         false,
         null,
       ],
@@ -440,6 +495,8 @@ interface InsertTransactionOptions {
   useRealTx?: boolean;
   name?: string;
   descriptionSuffix?: string;
+  /** Offset in seconds to add to validStart (for sorting group transactions to page 1) */
+  validStartOffsetSeconds?: number;
 }
 
 interface InsertTransactionResult {
@@ -459,6 +516,7 @@ async function insertTransaction(
     useRealTx = false,
     name = `Perf Test ${index}`,
     descriptionSuffix = `${index}`,
+    validStartOffsetSeconds = 0,
   } = options;
 
   let transactionBytes: Buffer;
@@ -487,6 +545,11 @@ async function insertTransaction(
     signature = Buffer.from('dummy-signature');
   }
 
+  // Apply offset to validStart (used to ensure group transactions appear on page 1)
+  if (validStartOffsetSeconds !== 0) {
+    validStart = new Date(validStart.getTime() + validStartOffsetSeconds * 1000);
+  }
+
   const result: QueryResult<TransactionRow> = await client.query(
     `INSERT INTO "transaction" (
        name, type, description, "transactionId", "transactionHash",
@@ -508,7 +571,7 @@ async function insertTransaction(
       creatorKeyId,
       signature,
       validStart,
-      'mainnet',
+      MIRROR_NETWORK,
       false,
       executedAt,
     ],
@@ -645,6 +708,10 @@ async function seedTransactionGroups(
   // Calculate offset to avoid ID collisions with other seeded transactions
   const indexOffset = SIGN_COUNT + HISTORY_COUNT + APPROVE_COUNT;
 
+  // Use a past timestamp to ensure group transactions appear on page 1
+  // The Ready to Sign list is sorted by validStart ASC, so older timestamps come first
+  const GROUP_TIMESTAMP_OFFSET_SECONDS = -3600; // 1 hour in the past
+
   const groupResult: QueryResult<GroupRow> = await client.query(
     `INSERT INTO "transaction_group" (description, atomic, sequential, "createdAt")
      VALUES ($1, $2, $3, NOW())
@@ -665,6 +732,7 @@ async function seedTransactionGroups(
       useRealTx: true,
       name: `Group Tx ${i + 1}`,
       descriptionSuffix: `group-item-${i}`,
+      validStartOffsetSeconds: GROUP_TIMESTAMP_OFFSET_SECONDS,
     });
 
     transactionIds.push(result.id);
@@ -929,6 +997,10 @@ async function seedData(): Promise<void> {
 
     // CLEANUP ONCE before seeding any users (prevents wiping earlier users' data)
     await cleanupAllSeedData(client);
+
+    // Seed CachedAccount so backend uses test key instead of querying Mirror Node
+    // This is required for Ready to Sign tests - fee payer 0.0.2 needs test key
+    await seedCachedAccount(client, testPublicKeyHex);
 
     // Seed data for each user (user keys cleaned per-user, transactions not)
     for (const email of usersToSeed) {
