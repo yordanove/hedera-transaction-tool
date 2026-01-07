@@ -73,7 +73,7 @@ test.describe('Drafts Page Performance', () => {
     console.log(`Pager total: ${pagerTotal} items`);
 
     const samples = await collectPerformanceSamples(async () => {
-      await window.click(SELECTORS.TAB_HISTORY);
+      await window.click(SELECTORS.PERSONAL_TAB_HISTORY);
       await window.waitForLoadState('networkidle');
 
       const startTime = Date.now();
