@@ -30,7 +30,7 @@ export const SELECTORS = {
   CONTACT_ROW: '.container-multiple-select',
   BUTTON_DRAFT_CONTINUE: '[data-testid^="button-draft-continue-"]',
 
-  GROUP_ROW_ICON: '.table-custom .bi-stack',
+  GROUP_ROW_ICON: '.bi-stack',
   BUTTON_DETAILS: 'button:has-text("Details")',
   BUTTON_SIGN_GROUP: '[data-testid="button-sign-group"]',
   BUTTON_CONFIRM: 'button:has-text("Confirm")',
