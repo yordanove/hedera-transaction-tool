@@ -14,7 +14,7 @@ import * as fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Page } from '@playwright/test';
 import { Client } from 'pg';
-import { TEST_USER_POOL, DATA_VOLUMES } from '../../k6/src/config/constants.js';
+import { TEST_USER_POOL, DATA_VOLUMES, COMPLEX_KEY } from '../../k6/src/config/constants.js';
 import { RegistrationPage } from '../../pages/RegistrationPage.js';
 import { OrganizationPage } from '../../pages/OrganizationPage.js';
 import { DEBUG } from './performanceUtils.js';
@@ -89,9 +89,13 @@ function loadStagingComplexKeys(): StagingComplexKeys {
     privateKeys,
     publicKeys,
     metadata: {
-      totalKeys: Number.parseInt(process.env.COMPLEX_KEY_TOTAL || '72', 10),
-      parentThreshold: Number.parseInt(process.env.COMPLEX_KEY_THRESHOLD || '17', 10),
-      childCount: 29, // Hedera-style default
+      totalKeys: process.env.COMPLEX_KEY_TOTAL
+        ? Number.parseInt(process.env.COMPLEX_KEY_TOTAL, 10)
+        : COMPLEX_KEY.TOTAL_KEYS,
+      parentThreshold: process.env.COMPLEX_KEY_THRESHOLD
+        ? Number.parseInt(process.env.COMPLEX_KEY_THRESHOLD, 10)
+        : COMPLEX_KEY.PARENT_THRESHOLD,
+      childCount: COMPLEX_KEY.CHILD_COUNT,
     },
   };
 }

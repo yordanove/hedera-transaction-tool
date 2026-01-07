@@ -18,14 +18,6 @@ export interface AuthResponse {
 }
 
 /**
- * Test user credentials
- */
-export interface TestUser {
-  email: string;
-  password: string;
-}
-
-/**
  * Transaction entity from API
  */
 export interface Transaction {

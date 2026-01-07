@@ -39,7 +39,7 @@ import {
 } from './complex-keys.js';
 import { seedComplexKeyTransactions } from './seed-perf-data.js';
 import { argonHash } from '../../utils/crypto.js';
-import { DATA_VOLUMES } from '../src/config/constants.js';
+import { DATA_VOLUMES, COMPLEX_KEY } from '../src/config/constants.js';
 
 /** Default output path for generated keys (localnet only) */
 const DEFAULT_OUTPUT_PATH = path.join(__dirname, '..', 'data', 'complex-keys.json');
@@ -127,7 +127,7 @@ async function createAccountWithComplexKey(
 
   const tx = new AccountCreateTransaction()
     .setInitialBalance(initialBalance)
-    .setKey(keyResult.adminKey);
+    .setKeyWithoutAlias(keyResult.adminKey);
 
   const response = await tx.execute(client);
   const receipt = await response.getReceipt(client);
@@ -287,6 +287,59 @@ async function seedStagingUserKeys(
   }
 }
 
+/**
+ * Seed staging PostgreSQL with keys and transactions.
+ */
+async function seedStagingPostgres(
+  keyData: ComplexKeyJson,
+  keyResult: ComplexKeyResult,
+  force: boolean,
+): Promise<void> {
+  if (!process.env.STAGING_POSTGRES_HOST) {
+    console.log('\nSkipping PostgreSQL seeding (STAGING_POSTGRES_HOST not set)');
+    return;
+  }
+
+  const userEmail = process.env.STAGING_USER_EMAIL;
+  if (!userEmail) {
+    console.log('\nSkipping PostgreSQL seeding (STAGING_USER_EMAIL not set)');
+    return;
+  }
+
+  const privateKeys = keyData.privateKeys.map((k) => PrivateKey.fromStringED25519(k));
+  const { userId, seeded, firstUserKeyId } = await seedStagingUserKeys(privateKeys, userEmail, force);
+  console.log(`\nSTAGING_USER_ID=${userId}`);
+
+  if (!seeded) {
+    console.log('(Keys already existed, not re-seeded)');
+  }
+
+  if (!firstUserKeyId) {
+    return;
+  }
+
+  const pgClient = new PgClient({
+    host: process.env.STAGING_POSTGRES_HOST,
+    port: Number.parseInt(process.env.STAGING_POSTGRES_PORT || '5432', 10),
+    database: process.env.STAGING_POSTGRES_DATABASE || 'postgres',
+    user: process.env.STAGING_POSTGRES_USERNAME || 'postgres',
+    password: process.env.STAGING_POSTGRES_PASSWORD,
+  });
+
+  await pgClient.connect();
+  try {
+    const transactionIds = await seedComplexKeyTransactions(
+      pgClient,
+      keyResult,
+      firstUserKeyId,
+      DATA_VOLUMES.COMPLEX_KEY_GROUP_SIZE,
+    );
+    console.log(`\nSTAGING_TRANSACTION_COUNT=${transactionIds.length}`);
+  } finally {
+    await pgClient.end();
+  }
+}
+
 async function setup(useSimpleKey: boolean = false): Promise<void> {
   const staging = isStaging();
   const outputPath = DEFAULT_OUTPUT_PATH;
@@ -317,39 +370,7 @@ async function setup(useSimpleKey: boolean = false): Promise<void> {
 
     if (staging) {
       outputStagingEnvVars(keyData);
-
-      if (process.env.STAGING_POSTGRES_HOST) {
-        const userEmail = process.env.STAGING_USER_EMAIL;
-        if (!userEmail) {
-          console.log('\nSkipping PostgreSQL seeding (STAGING_USER_EMAIL not set)');
-        } else {
-          const privateKeys = keyData.privateKeys.map((k) => PrivateKey.fromStringED25519(k));
-          const { userId, seeded, firstUserKeyId } = await seedStagingUserKeys(privateKeys, userEmail, force);
-          console.log(`\nSTAGING_USER_ID=${userId}`);
-          if (!seeded) {
-            console.log('(Keys already existed, not re-seeded)');
-          }
-
-          if (firstUserKeyId) {
-            const pgClient = new PgClient({
-              host: process.env.STAGING_POSTGRES_HOST,
-              port: Number.parseInt(process.env.STAGING_POSTGRES_PORT || '5432', 10),
-              database: process.env.STAGING_POSTGRES_DATABASE || 'postgres',
-              user: process.env.STAGING_POSTGRES_USERNAME || 'postgres',
-              password: process.env.STAGING_POSTGRES_PASSWORD,
-            });
-            await pgClient.connect();
-            try {
-              const transactionIds = await seedComplexKeyTransactions(pgClient, keyResult, firstUserKeyId, DATA_VOLUMES.COMPLEX_KEY_GROUP_SIZE);
-              console.log(`\nSTAGING_TRANSACTION_COUNT=${transactionIds.length}`);
-            } finally {
-              await pgClient.end();
-            }
-          }
-        }
-      } else {
-        console.log('\nSkipping PostgreSQL seeding (STAGING_POSTGRES_HOST not set)');
-      }
+      await seedStagingPostgres(keyData, keyResult, force);
     } else {
       saveKeys(keyData, outputPath);
     }
@@ -375,9 +396,13 @@ async function verify(): Promise<void> {
     existing = {
       accountId: process.env.COMPLEX_KEY_ACCOUNT_ID,
       metadata: {
-        parentThreshold: Number.parseInt(process.env.COMPLEX_KEY_THRESHOLD || '17', 10),
-        childCount: 29,
-        totalKeys: Number.parseInt(process.env.COMPLEX_KEY_TOTAL || '72', 10),
+        parentThreshold: process.env.COMPLEX_KEY_THRESHOLD
+          ? Number.parseInt(process.env.COMPLEX_KEY_THRESHOLD, 10)
+          : COMPLEX_KEY.PARENT_THRESHOLD,
+        childCount: COMPLEX_KEY.CHILD_COUNT,
+        totalKeys: process.env.COMPLEX_KEY_TOTAL
+          ? Number.parseInt(process.env.COMPLEX_KEY_TOTAL, 10)
+          : COMPLEX_KEY.TOTAL_KEYS,
         childConfigs: [],
       },
       privateKeys,
@@ -420,9 +445,9 @@ async function verify(): Promise<void> {
 
 // CLI interface
 async function main(): Promise<void> {
-  const args = process.argv.slice(2);
+  const args = new Set(process.argv.slice(2));
 
-  if (args.includes('--help') || args.includes('-h')) {
+  if (args.has('--help') || args.has('-h')) {
     console.log(`
 Complex Account Setup Script
 
@@ -468,12 +493,12 @@ Output:
     return;
   }
 
-  if (args.includes('--verify')) {
+  if (args.has('--verify')) {
     await verify();
     return;
   }
 
-  if (args.includes('--force')) {
+  if (args.has('--force')) {
     const outputPath = DEFAULT_OUTPUT_PATH;
     if (fs.existsSync(outputPath)) {
       fs.unlinkSync(outputPath);
@@ -481,18 +506,16 @@ Output:
     }
   }
 
-  const useSimpleKey = args.includes('--simple');
+  const useSimpleKey = args.has('--simple');
   await setup(useSimpleKey);
 }
 
 // Run if executed directly
 const isMainModule = process.argv[1]?.includes('create-complex-accounts');
 if (isMainModule) {
-  main().catch((error) => {
+  await main().catch((error: unknown) => {
     console.error('Error:', error);
     process.exit(1);
   });
 }
 
-// Export for programmatic use
-export { createAccountWithComplexKey, verifyAccount, loadExistingKeys, saveKeys };

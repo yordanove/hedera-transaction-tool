@@ -5,6 +5,7 @@
  * Tests will fail if required credentials are not provided.
  */
 
+import { getEnvironment } from './environments';
 
 // k6 environment variables
 declare const __ENV: Record<string, string | undefined>;
@@ -81,21 +82,14 @@ export function getCredentialsForVU(): TestCredentials {
 }
 
 /**
- * Get base URL from environment or throw if not available.
+ * Get base URL from environment.
+ * Priority: BASE_URL env var > ENV-based lookup > localhost fallback
+ *
+ * Usage:
+ *   k6 run script.js                    # local (default)
+ *   k6 run -e ENV=staging script.js     # staging via named environment
+ *   k6 run -e BASE_URL='...' script.js  # direct URL override
  */
-export function getBaseUrl(): string {
-  const baseUrl = __ENV.BASE_URL;
-
-  if (!baseUrl) {
-    throw new Error('Missing required environment variable: BASE_URL must be set');
-  }
-
-  return baseUrl;
-}
-
-/**
- * Get base URL with fallback to localhost for local development.
- */
-export function getBaseUrlWithFallback(fallback = 'http://localhost:3001'): string {
-  return __ENV.BASE_URL || fallback;
+export function getBaseUrlWithFallback(): string {
+  return __ENV.BASE_URL || getEnvironment().baseUrl;
 }

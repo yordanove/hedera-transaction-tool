@@ -67,15 +67,6 @@ export const PAGINATION = {
 };
 
 /**
- * Default test credentials for k6 performance tests
- * Used by seed scripts and npm run commands
- */
-export const TEST_CREDENTIALS = {
-  EMAIL: 'k6perf@test.com',
-  PASSWORD: 'Password123',
-} as const;
-
-/**
  * Test user pool for staging rate limiting avoidance.
  * Each test can use a different user to avoid backend rate limits (3 logins/min per email).
  * All emails match cleanup pattern 'k6perf@%' for safe staging cleanup.

@@ -14,7 +14,7 @@
  */
 
 import { Client, QueryResult } from 'pg';
-import argon2 from 'argon2';
+import * as argon2 from 'argon2';
 import { TEST_USER_POOL } from '../src/config/constants.js';
 
 interface TestUser {
@@ -98,7 +98,7 @@ async function seedSingleUser(
 async function seedUsers(): Promise<void> {
   const client = new Client({
     host: process.env.POSTGRES_HOST || 'localhost',
-    port: parseInt(process.env.POSTGRES_PORT || '5432'),
+    port: Number.parseInt(process.env.POSTGRES_PORT || '5432', 10),
     database: process.env.POSTGRES_DATABASE || 'postgres',
     user: process.env.POSTGRES_USERNAME || 'postgres',
     password: process.env.POSTGRES_PASSWORD || 'postgres',
@@ -138,4 +138,4 @@ async function seedUsers(): Promise<void> {
   }
 }
 
-seedUsers();
+await seedUsers();

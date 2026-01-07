@@ -35,7 +35,6 @@ export async function getUserIdByEmail(email: string): Promise<string | null> {
     const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY, (err) => {
       if (err) {
         reject(err);
-        return;
       }
     });
 

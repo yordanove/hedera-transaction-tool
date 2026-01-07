@@ -16,28 +16,21 @@
  */
 
 import { Client, QueryResult } from 'pg';
-import crypto from 'crypto';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import argon2 from 'argon2';
 import {
   PrivateKey,
   Mnemonic,
   FileCreateTransaction,
   AccountId,
-  Timestamp,
   Transaction,
 } from '@hashgraph/sdk';
 import { DATA_VOLUMES, SEED_MARKER, TEST_USER_POOL } from '../src/config/constants.js';
 import type { SignatureMap } from '../src/types/api.types.js';
-import {
-  generateSimpleComplexKey,
-  generateHederaStyleComplexKey,
-  serializeComplexKey,
-  type ComplexKeyResult,
-  type ComplexKeyJson,
-} from './complex-keys.js';
+import { type ComplexKeyResult } from './complex-keys.js';
 import { proto } from '@hashgraph/proto';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -187,7 +180,7 @@ async function findOrCreateUserKey(
  *
  * @param client - PostgreSQL client
  * @param userId - User ID to associate keys with
- * @param complexKey - ComplexKeyResult from generateSimpleComplexKey or generateHederaStyleComplexKey
+ * @param complexKey - ComplexKeyResult with keys and metadata
  * @param mnemonicHash - Hash to use for all keys (required for accountSetupRequired() check)
  * @returns Array of inserted user_key IDs
  */
@@ -223,30 +216,6 @@ export async function seedComplexKeys(
 
   console.log(`  Completed: ${userKeyIds.length} complex keys seeded`);
   return userKeyIds;
-}
-
-/**
- * Generate and save complex key data for later use in tests.
- * Saves to data/complex-keys.json for loading by test scripts.
- *
- * @param useHederaStyle - If true, generates full 17-of-29 structure (72 keys). If false, uses simpler 2-of-3 (6 keys).
- * @returns ComplexKeyResult for immediate use
- */
-export function generateAndSaveComplexKeys(useHederaStyle: boolean = false): ComplexKeyResult {
-  const complexKey = useHederaStyle ? generateHederaStyleComplexKey() : generateSimpleComplexKey();
-
-  const dataDir = path.join(__dirname, '../data');
-  fs.mkdirSync(dataDir, { recursive: true });
-
-  const complexKeysPath = path.join(dataDir, 'complex-keys.json');
-  const serialized = serializeComplexKey(complexKey, 'pending-account-creation');
-  fs.writeFileSync(complexKeysPath, JSON.stringify(serialized, null, 2));
-
-  console.log(`\nSaved complex keys to: ${complexKeysPath}`);
-  console.log(`  Structure: THRESHOLD (${complexKey.metadata.parentThreshold} of ${complexKey.metadata.childCount})`);
-  console.log(`  Total keys: ${complexKey.metadata.totalKeys}`);
-
-  return complexKey;
 }
 
 /**
@@ -918,7 +887,7 @@ async function validateSeededData(client: Client): Promise<void> {
   let allPassed = true;
   for (const { name, query, params, expected } of checks) {
     const result: QueryResult<CountRow> = await client.query(query, params);
-    const actual = parseInt(result.rows[0].count);
+    const actual = Number.parseInt(result.rows[0].count, 10);
     const passed = actual >= expected;
     const status = passed ? '✓' : '✗';
     console.log(`  ${status} ${name}: ${actual}/${expected}`);
@@ -974,7 +943,7 @@ async function seedData(): Promise<void> {
 
   const client = new Client({
     host: process.env.POSTGRES_HOST || 'localhost',
-    port: parseInt(process.env.POSTGRES_PORT || '5432'),
+    port: Number.parseInt(process.env.POSTGRES_PORT || '5432', 10),
     database: process.env.POSTGRES_DATABASE || 'postgres',
     user: process.env.POSTGRES_USERNAME || 'postgres',
     password: process.env.POSTGRES_PASSWORD || 'postgres',
@@ -1050,5 +1019,5 @@ async function seedData(): Promise<void> {
 
 const isMainModule = process.argv[1]?.includes('seed-perf-data');
 if (isMainModule) {
-  seedData();
+  await seedData();
 }

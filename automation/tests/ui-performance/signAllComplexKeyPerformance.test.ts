@@ -20,6 +20,7 @@ import {
   formatDuration,
   waitForGroupRow,
   navigateToReadyToSign,
+  executeSignAllWithSpinnerCheck,
   THRESHOLDS,
   DEBUG,
 } from './performanceUtils.js';
@@ -128,37 +129,10 @@ test.describe('Sign All with Complex Threshold Keys (Org Mode)', () => {
     await detailsButton.click();
     await window.waitForLoadState('networkidle');
 
-    const signAllButton = await window.waitForSelector(SELECTORS.BUTTON_SIGN_GROUP, {
-      timeout: 10000,
-    });
-    expect(signAllButton, 'Sign All button not found').not.toBeNull();
+    const signAllButton = window.locator(SELECTORS.BUTTON_SIGN_GROUP);
+    await expect(signAllButton, 'Sign All button not found').toBeVisible({ timeout: 10000 });
 
-    const startTime = Date.now();
-
-    await signAllButton.click();
-
-    const confirmButton = await window.waitForSelector(SELECTORS.BUTTON_CONFIRM, {
-      timeout: 10000,
-    });
-    await confirmButton.click();
-
-    const spinnerSelector = `${SELECTORS.BUTTON_SIGN_GROUP} ${SELECTORS.SPINNER_LOADING}`;
-    const spinner = await window.waitForSelector(spinnerSelector, {
-      state: 'visible',
-      timeout: 2000,
-    });
-    expect(spinner, 'Loading spinner should appear during signing').not.toBeNull();
-    if (DEBUG) console.log('Spinner visible during signing');
-
-    await window.waitForSelector(SELECTORS.TOAST_SIGNED_SUCCESS, {
-      timeout: 20000,
-    });
-
-    const signTime = Date.now() - startTime;
-
-    const spinnerAfter = await window.$(spinnerSelector);
-    expect(spinnerAfter, 'Loading spinner should disappear after completion').toBeNull();
-    if (DEBUG) console.log('Spinner disappeared after signing');
+    const signTime = await executeSignAllWithSpinnerCheck(window, signAllButton);
 
     console.log(`Sign All (complex key) completed in ${formatDuration(signTime)}`);
     console.log(`Keys used: ${complexKey.metadata.parentThreshold} signatures from ${complexKey.metadata.totalKeys} keys`);

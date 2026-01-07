@@ -5,21 +5,8 @@
  */
 
 import http, { Response } from 'k6/http';
-import type { TestUser, AuthHeaders, AuthResponse } from '../types';
-import { getCredentialsForVU, type TestCredentials } from '../config/credentials';
+import type { AuthHeaders, AuthResponse } from '../types';
 import { HTTP_STATUS, THRESHOLDS } from '../config/constants';
-
-/**
- * Get test user for current VU
- * Distributes users evenly across VUs to prevent auth conflicts
- */
-export function getTestUser(): TestUser {
-  const creds: TestCredentials = getCredentialsForVU();
-  return {
-    email: creds.email,
-    password: creds.password,
-  };
-}
 
 /**
  * Authenticate and return auth token
@@ -54,16 +41,8 @@ export function login(
     }
   }
 
-  console.error(`Login failed: ${res.status} - ${res.body}`);
+  console.error(`Login failed: ${res.status} - ${res.body as string}`);
   return null;
-}
-
-/**
- * Login with auto-selected test user for current VU
- */
-export function loginAsTestUser(baseUrl: string): string | null {
-  const user = getTestUser();
-  return login(baseUrl, user.email, user.password);
 }
 
 /**
@@ -87,9 +66,3 @@ export function formatDuration(ms: number): string {
   return `${(ms / THRESHOLDS.PAGE_LOAD_MS).toFixed(2)}s`;
 }
 
-/**
- * Random sleep helper (returns seconds for k6 sleep)
- */
-export function randomSleep(min: number, max: number): number {
-  return Math.random() * (max - min) + min;
-}

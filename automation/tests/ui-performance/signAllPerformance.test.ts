@@ -29,6 +29,7 @@ import {
   waitForRowCount,
   waitForGroupRow,
   navigateToReadyToSign,
+  executeSignAllWithSpinnerCheck,
   TRANSACTION_ROW_SELECTOR,
   DATA_VOLUMES,
   THRESHOLDS,
@@ -75,8 +76,8 @@ test.describe('Sign All Performance (Org Mode)', () => {
 
     await window.waitForLoadState('networkidle');
 
-    const signAllButton = await window.waitForSelector(SELECTORS.BUTTON_SIGN_GROUP, { timeout: 10000 });
-    expect(signAllButton, 'Sign All button not found on group details page').not.toBeNull();
+    const signAllButton = window.locator(SELECTORS.BUTTON_SIGN_GROUP);
+    await expect(signAllButton, 'Sign All button not found on group details page').toBeVisible({ timeout: 10000 });
     if (DEBUG) console.log('Found Sign All button on group details page');
 
     // STRICT: require minimum volume
@@ -84,32 +85,7 @@ test.describe('Sign All Performance (Org Mode)', () => {
     expect(initialCount, `Group has ${initialCount} txns, need >= ${MIN_GROUP_SIZE}`).toBeGreaterThanOrEqual(MIN_GROUP_SIZE);
     if (DEBUG) console.log(`Group has ${initialCount} transactions to sign`);
 
-    const startTime = Date.now();
-
-    await signAllButton.click();
-
-    const confirmButton = await window.waitForSelector(SELECTORS.BUTTON_CONFIRM, {
-      timeout: 10000,
-    });
-    await confirmButton.click();
-
-    const spinnerSelector = `${SELECTORS.BUTTON_SIGN_GROUP} ${SELECTORS.SPINNER_LOADING}`;
-    const spinner = await window.waitForSelector(spinnerSelector, {
-      state: 'visible',
-      timeout: 2000,
-    });
-    expect(spinner, 'Loading spinner should appear during signing').not.toBeNull();
-    if (DEBUG) console.log('Spinner visible during signing');
-
-    await window.waitForSelector(SELECTORS.TOAST_SIGNED_SUCCESS, {
-      timeout: 20000,
-    });
-
-    const signTime = Date.now() - startTime;
-
-    const spinnerAfter = await window.$(spinnerSelector);
-    expect(spinnerAfter, 'Loading spinner should disappear after completion').toBeNull();
-    if (DEBUG) console.log('Spinner disappeared after signing');
+    const signTime = await executeSignAllWithSpinnerCheck(window, signAllButton);
 
     console.log(`Sign All completed in ${formatDuration(signTime)}`);
 

@@ -62,6 +62,9 @@ test.describe('Ready to Sign Performance (Org Mode)', () => {
       await window.click(SELECTORS.TAB_HISTORY);
       await window.waitForLoadState('networkidle');
 
+      // Refresh cached account before each sample to prevent 10s TTL expiration
+      await refreshCachedAccountTimestamp();
+
       const startTime = Date.now();
       await window.click(SELECTORS.TAB_READY_TO_SIGN);
       await window.waitForLoadState('networkidle');

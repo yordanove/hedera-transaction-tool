@@ -5,11 +5,11 @@
  */
 
 import { Page, Locator, expect } from '@playwright/test';
-import { DATA_VOLUMES, THRESHOLDS } from '../../k6/src/config/constants.js';
+import { THRESHOLDS } from '../../k6/src/config/constants.js';
 import { SELECTORS } from './selectors.js';
 
 // Re-export k6 constants for UI perf tests (SSOT)
-export { DATA_VOLUMES, THRESHOLDS };
+export { DATA_VOLUMES, THRESHOLDS } from '../../k6/src/config/constants.js';
 
 // Debug mode - enable with DEBUG=true environment variable
 export const DEBUG = process.env.DEBUG === 'true';
@@ -195,4 +195,47 @@ export async function waitForGroupRow(window: Page): Promise<Locator> {
   await expect(groupRow, 'No group row found - check seeding').toBeVisible({ timeout: 5000 });
 
   return groupRow;
+}
+
+/**
+ * Execute Sign All button click with spinner visibility checks.
+ * Handles the confirm dialog, verifies spinner appears during signing,
+ * waits for success toast, and verifies spinner disappears.
+ *
+ * @param window - Playwright page
+ * @param signAllButton - Locator for the Sign All button
+ * @returns Sign time in milliseconds
+ */
+export async function executeSignAllWithSpinnerCheck(
+  window: Page,
+  signAllButton: Locator,
+): Promise<number> {
+  const startTime = Date.now();
+
+  await signAllButton.click();
+
+  const confirmButton = await window.waitForSelector(SELECTORS.BUTTON_CONFIRM, {
+    timeout: 10000,
+  });
+  await confirmButton.click();
+
+  const spinnerSelector = `${SELECTORS.BUTTON_SIGN_GROUP} ${SELECTORS.SPINNER_LOADING}`;
+  const spinner = await window.waitForSelector(spinnerSelector, {
+    state: 'visible',
+    timeout: 2000,
+  });
+  expect(spinner, 'Loading spinner should appear during signing').not.toBeNull();
+  if (DEBUG) console.log('Spinner visible during signing');
+
+  await window.waitForSelector(SELECTORS.TOAST_SIGNED_SUCCESS, {
+    timeout: 20000,
+  });
+
+  const signTime = Date.now() - startTime;
+
+  // Wait for spinner to disappear (not just check immediately - avoids race condition)
+  await window.waitForSelector(spinnerSelector, { state: 'hidden', timeout: 5000 });
+  if (DEBUG) console.log('Spinner disappeared after signing');
+
+  return signTime;
 }

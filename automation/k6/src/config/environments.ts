@@ -42,9 +42,6 @@ function buildEndpoint(
   return url;
 }
 
-// Cache to ensure we only log once
-let _logged = false;
-
 /**
  * Get environment configuration based on ENV variable
  */
@@ -61,22 +58,6 @@ export function getEnvironment(): Environment {
 
   return env;
 }
-
-/**
- * Log environment info (only once per test run)
- */
-export function logEnvironment(): void {
-  if (!_logged) {
-    const env = getEnvironment();
-    console.log(`Running against: ${env.name} (${env.baseUrl})`);
-    _logged = true;
-  }
-}
-
-/**
- * Base URL - supports direct override or environment selection
- */
-export const BASE_URL: string = __ENV.BASE_URL || getEnvironment().baseUrl;
 
 /**
  * API endpoints for page load tests

@@ -5,7 +5,6 @@
  */
 
 import type { SummaryData, MetricPropertyMap } from '../types';
-import { formatDuration } from './helpers';
 
 /**
  * Rename metric properties in summary data for cleaner reports
@@ -85,23 +84,3 @@ export const needed_properties: MetricPropertyMap = {
   'ready-to-sign response < 1s': 'Ready to Sign Under 1s',
 };
 
-/**
- * Generate text summary for console output
- * @param data - k6 summary data
- * @param title - Title for the summary (e.g., "All Transactions", "History")
- * @returns Formatted text summary string
- */
-export function textSummary(data: SummaryData, title: string): string {
-  const metrics = data.metrics;
-  let output = `\n=== ${title} Performance Summary ===\n\n`;
-
-  if (metrics.http_req_duration) {
-    const dur = metrics.http_req_duration.values;
-    output += `HTTP Request Duration:\n`;
-    output += `  avg: ${formatDuration(dur.avg)}\n`;
-    output += `  p95: ${formatDuration(dur['p(95)'])}\n`;
-    output += `  max: ${formatDuration(dur.max)}\n`;
-  }
-
-  return output;
-}
