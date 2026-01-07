@@ -63,7 +63,7 @@ test.describe('Sign All Performance (Org Mode)', () => {
     await resetDbState();
   });
 
-  test('Sign All should complete in under 4 seconds', async () => {
+  test('Sign All should complete in under 4 seconds with loading indicator', async () => {
     // Pass cache refresh to navigateToReadyToSign - it will be called RIGHT BEFORE
     // clicking the Ready to Sign tab to minimize the window for Mirror Node override
     await navigateToReadyToSign(window, refreshCachedAccountTimestamp);
@@ -93,11 +93,23 @@ test.describe('Sign All Performance (Org Mode)', () => {
     });
     await confirmButton.click();
 
+    const spinnerSelector = `${SELECTORS.BUTTON_SIGN_GROUP} ${SELECTORS.SPINNER_LOADING}`;
+    const spinner = await window.waitForSelector(spinnerSelector, {
+      state: 'visible',
+      timeout: 2000,
+    });
+    expect(spinner, 'Loading spinner should appear during signing').not.toBeNull();
+    if (DEBUG) console.log('Spinner visible during signing');
+
     await window.waitForSelector(SELECTORS.TOAST_SIGNED_SUCCESS, {
       timeout: 20000,
     });
 
     const signTime = Date.now() - startTime;
+
+    const spinnerAfter = await window.$(spinnerSelector);
+    expect(spinnerAfter, 'Loading spinner should disappear after completion').toBeNull();
+    if (DEBUG) console.log('Spinner disappeared after signing');
 
     console.log(`Sign All completed in ${formatDuration(signTime)}`);
 

@@ -35,6 +35,9 @@ export const SELECTORS = {
   BUTTON_CONFIRM: 'button:has-text("Confirm")',
   TOAST_SIGNED_SUCCESS: '.v-toast__text:has-text("Transactions signed successfully")',
 
+  // Loading indicators
+  SPINNER_LOADING: '.spinner-border',
+
   // Pager elements (class-based - fragile, needs frontend data-testid)
   PAGER_SELECT: '.pager-per-page select',
   PAGER_ITEMS: '.pager-shown-items',
