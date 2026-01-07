@@ -19,7 +19,7 @@ export const THRESHOLDS = {
  * Note: Backend max page size is 100, so larger values require pagination
  */
 export const DATA_VOLUMES = {
-  SIGN_ALL_TRANSACTIONS: 200, // Requires 2 pages
+  SIGN_ALL_TRANSACTIONS: 500, // Requires 5 pages (500 txns for scaling test)
   READY_TO_SIGN: 200, // Requires 2 pages
   DRAFTS: 100,
   READY_FOR_REVIEW: 100, // Also used for approve transactions
@@ -27,7 +27,8 @@ export const DATA_VOLUMES = {
   ACCOUNTS: 100,
   FILES: 100,
   HISTORY: 500, // Requires 5 pages
-  GROUP_SIZE: 100, // Transactions per group for Sign All testing
+  GROUP_SIZE: 500, // Transactions per group for Sign All testing (500 txn scaling)
+  COMPLEX_KEY_GROUP_SIZE: 100, // Complex key tests use smaller group (17 sigs per txn)
   READY_FOR_EXECUTION: 100, // Transactions ready to submit to Hedera
 };
 

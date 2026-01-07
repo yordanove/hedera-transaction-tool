@@ -340,7 +340,7 @@ async function setup(useSimpleKey: boolean = false): Promise<void> {
             });
             await pgClient.connect();
             try {
-              const transactionIds = await seedComplexKeyTransactions(pgClient, keyResult, firstUserKeyId, DATA_VOLUMES.GROUP_SIZE);
+              const transactionIds = await seedComplexKeyTransactions(pgClient, keyResult, firstUserKeyId, DATA_VOLUMES.COMPLEX_KEY_GROUP_SIZE);
               console.log(`\nSTAGING_TRANSACTION_COUNT=${transactionIds.length}`);
             } finally {
               await pgClient.end();

@@ -459,13 +459,13 @@ export async function seedComplexKeysToSQLite(
  *
  * @param userEmail - Email of the user to seed keys for
  * @param useHederaStyle - If true, uses full 17-of-29 structure (72 keys). Default: simple 2-of-3 (6 keys).
- * @param transactionCount - Number of transactions to create (default: GROUP_SIZE from constants)
+ * @param transactionCount - Number of transactions to create (default: COMPLEX_KEY_GROUP_SIZE)
  * @returns ComplexKeySetupResult with keys, transaction IDs, and mnemonicHash
  */
 export async function seedComplexKeyData(
   userEmail: string,
   useHederaStyle: boolean = false,
-  transactionCount: number = DATA_VOLUMES.GROUP_SIZE,
+  transactionCount: number = DATA_VOLUMES.COMPLEX_KEY_GROUP_SIZE,
 ): Promise<ComplexKeySetupResult> {
   const client = createPgClient();
 
