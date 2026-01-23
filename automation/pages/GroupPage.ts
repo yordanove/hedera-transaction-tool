@@ -35,7 +35,7 @@ export class GroupPage extends BasePage {
   deleteAllButtonSelector = 'button-delete-all';
   confirmDeleteAllButtonSelector = 'button-confirm-delete-all';
   confirmGroupTransactionButtonSelector = 'button-confirm-group-transaction';
-  detailsGroupButtonSelector = 'button-group-details-';
+  detailsGroupButtonSelector = 'button-transaction-node-details-';
   importCsvButtonSelector = 'button-import-csv';
   // Text
   toastMessageSelector = '.v-toast__text';
@@ -78,6 +78,9 @@ export class GroupPage extends BasePage {
   }
 
   async clickOnSignAndExecuteButton() {
+    // Wait for any loader to disappear before clicking (same pattern as clickOnSignAllTransactionsButton)
+    await this.waitForElementToDisappear('[data-testid="div-loader"]', 2000, 30000);
+    await this.waitForElementToBeVisible(this.signAndExecuteButtonSelector, 5000);
     await this.click(this.signAndExecuteButtonSelector);
   }
 
@@ -216,6 +219,9 @@ export class GroupPage extends BasePage {
       this.importCsvButtonSelector,
       path.resolve(__dirname, '..', 'data', fileName),
     );
+    // Wait for all transactions to be loaded before proceeding
+    const lastTxIndex = numberOfTransactions - 1;
+    await this.waitForElementToBeVisible(`span-transaction-type-${lastTxIndex}`, 10000);
   }
 
   async addOrgAllowanceTransactionToGroup(
@@ -253,6 +259,8 @@ export class GroupPage extends BasePage {
   }
 
   async clickOnConfirmGroupTransactionButton() {
+    // Wait for the confirmation modal to appear before clicking
+    await this.waitForElementToBeVisible(this.confirmGroupTransactionButtonSelector, 5000);
     await this.click(this.confirmGroupTransactionButtonSelector);
   }
 
@@ -267,11 +275,18 @@ export class GroupPage extends BasePage {
   }
 
   async clickOnDetailsGroupButton(index: number) {
-    await this.click(this.detailsGroupButtonSelector + index);
+    const selector = this.detailsGroupButtonSelector + index;
+    // Wait for the group button to be visible (may take time to load)
+    await this.waitForElementToBeVisible(selector, 10000);
+    await this.click(selector);
   }
 
   async clickOnTransactionDetailsButton(index: number) {
-    await this.click(this.orgTransactionDetailsButtonIndexSelector + index);
+    const selector = this.orgTransactionDetailsButtonIndexSelector + index;
+    // Wait for group details page to load before clicking transaction
+    await this.waitForElementToDisappear('[data-testid="div-loader"]', 2000, 30000);
+    await this.waitForElementToBeVisible(selector, 10000);
+    await this.click(selector);
   }
 
   async logInAndSignGroupTransactionsByAllUsers(encryptionPassword: string, signAll = true) {
@@ -326,6 +341,10 @@ export class GroupPage extends BasePage {
   }
 
   async clickOnCancelAllButton() {
+    // Wait for page to fully load (spinner disappears when fullyLoaded = true)
+    await this.waitForElementToDisappear('[data-testid="div-loader"]', 2000, 30000);
+    // Now the Cancel All button should be visible
+    await this.waitForElementToBeVisible(this.organizationPage.cancelAllTransactionsButtonSelector, 5000);
     await this.click(this.organizationPage.cancelAllTransactionsButtonSelector);
   }
 

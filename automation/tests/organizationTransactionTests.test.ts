@@ -37,7 +37,6 @@ test.describe('Organization Transaction tests', () => {
     test.slow();
     await resetDbState();
     await resetPostgresDbState();
-    await flushRateLimiter();
     ({ app, window } = await setupApp());
     transactionPage = new TransactionPage(window);
     organizationPage = new OrganizationPage(window);
@@ -99,6 +98,9 @@ test.describe('Organization Transaction tests', () => {
   });
 
   test.beforeEach(async () => {
+    // Flush rate limiter before each test to prevent "too many requests" errors
+    await flushRateLimiter();
+
     await organizationPage.signInOrganization(
       firstUser.email,
       firstUser.password,

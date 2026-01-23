@@ -8,7 +8,7 @@ import {
   verifyTransactionExists,
 } from '../utils/databaseQueries.js';
 import { decodeAndFlattenKeys } from '../utils/keyUtil.js';
-import { getCleanAccountId, LOCALNET_PAYER_ACCOUNT_ID } from '../utils/util.js';
+import { getCleanAccountId } from '../utils/util.js';
 import { Transaction } from '../../front-end/src/shared/interfaces/index.js';
 import * as path from 'node:path';
 
@@ -138,18 +138,6 @@ export class TransactionPage extends BasePage {
   draftDetailsDescriptionIndexSelector = 'span-draft-tx-description-';
   draftDetailsIsTemplateCheckboxSelector = 'checkbox-is-template-';
 
-  // Method to close the 'Save Draft' modal if it appears
-  async closeDraftModal() {
-    // Wait for the button to be visible with a timeout
-    const modalButton = this.window.getByTestId(this.discardModalDraftButtonSelector);
-    await modalButton.waitFor({ state: 'visible', timeout: 500 }).catch(() => {});
-
-    // If the modal is visible, then click the button to close the modal
-    if (await modalButton.isVisible()) {
-      await modalButton.click();
-    }
-  }
-
   // Combined method to verify all elements on Create transaction page
   async verifyAccountCreateTransactionElements() {
     const checks = await Promise.all([
@@ -236,16 +224,27 @@ export class TransactionPage extends BasePage {
   }
 
   async clickOnCreateNewTransactionButton() {
-    // DEBUG: Pause to inspect UI state before clicking Create New
-    await this.window.pause();
+    // Retry mechanism for flaky dropdown
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        // Click Create New button to open dropdown
+        await this.click(this.createNewTransactionButtonSelector);
 
-    // Click Create New button to open dropdown
-    await this.click(this.createNewTransactionButtonSelector);
+        // Wait for dropdown to stabilize
+        await this.window.waitForTimeout(500);
 
-    // Wait for dropdown and click Single Transaction
-    const singleTxButton = this.getElement(this.singleTransactionButtonSelector);
-    await singleTxButton.waitFor({ state: 'visible', timeout: 5000 });
-    await singleTxButton.click();
+        // Wait for dropdown item and click
+        const singleTxButton = this.getElement(this.singleTransactionButtonSelector);
+        await singleTxButton.waitFor({ state: 'visible', timeout: 3000 });
+        await singleTxButton.click();
+        return; // Success, exit the retry loop
+      } catch (error) {
+        if (attempt === 2) throw error; // Last attempt, rethrow
+        // Click elsewhere to close dropdown before retry
+        await this.window.keyboard.press('Escape');
+        await this.window.waitForTimeout(300);
+      }
+    }
   }
 
   async clickOnImportButton() {
@@ -766,23 +765,6 @@ export class TransactionPage extends BasePage {
   }
 
   async clickOnSignAndSubmitButton() {
-    // For LOCALNET: Mirror Node doesn't return accounts, so Payer ID is empty.
-    // Fill it explicitly with the known account ID for the imported key.
-    if (process.env.ENVIRONMENT?.toUpperCase() === 'LOCALNET') {
-      const payerInput = this.window.getByTestId(this.payerAccountInputSelector);
-      const currentValue = await payerInput.inputValue();
-      if (!currentValue || currentValue.trim() === '') {
-        await this.fillInPayerAccountId(LOCALNET_PAYER_ACCOUNT_ID);
-        // Blur field to trigger Vue validation
-        await payerInput.blur();
-        // Wait for Vue to re-validate and enable the button
-        const button = this.window.getByTestId(this.signAndSubmitButtonSelector);
-        await button.waitFor({ state: 'visible', timeout: 5000 });
-        // Small delay for Vue reactivity to update button state
-        await this.window.waitForTimeout(500);
-      }
-    }
-
     // Scroll to top to ensure button is visible, then click
     const button = this.window.getByTestId(this.signAndSubmitButtonSelector);
     await button.scrollIntoViewIfNeeded();
