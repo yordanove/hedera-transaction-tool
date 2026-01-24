@@ -37,6 +37,7 @@ export class TransactionPage extends BasePage {
 
   //Inputs
   payerAccountInputSelector = 'input-payer-account';
+  payerDropdownSelector = 'dropdown-payer'; // Used for queries (FileContentsQuery, etc.)
   initialBalanceInputSelector = 'input-initial-balance-amount';
   maxAutoAssociationsInputSelector = 'input-max-auto-token-associations';
   accountMemoInputSelector = 'input-account-memo';
@@ -137,18 +138,6 @@ export class TransactionPage extends BasePage {
   draftDetailsDescriptionIndexSelector = 'span-draft-tx-description-';
   draftDetailsIsTemplateCheckboxSelector = 'checkbox-is-template-';
 
-  // Method to close the 'Save Draft' modal if it appears
-  async closeDraftModal() {
-    // Wait for the button to be visible with a timeout
-    const modalButton = this.window.getByTestId(this.discardModalDraftButtonSelector);
-    await modalButton.waitFor({ state: 'visible', timeout: 500 }).catch(() => {});
-
-    // If the modal is visible, then click the button to close the modal
-    if (await modalButton.isVisible()) {
-      await modalButton.click();
-    }
-  }
-
   // Combined method to verify all elements on Create transaction page
   async verifyAccountCreateTransactionElements() {
     const checks = await Promise.all([
@@ -235,8 +224,27 @@ export class TransactionPage extends BasePage {
   }
 
   async clickOnCreateNewTransactionButton() {
-    await this.click(this.createNewTransactionButtonSelector);
-    await this.clickOnSingleTransactionButton();
+    // Retry mechanism for flaky dropdown
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        // Click Create New button to open dropdown
+        await this.click(this.createNewTransactionButtonSelector);
+
+        // Wait for dropdown to stabilize
+        await this.window.waitForTimeout(500);
+
+        // Wait for dropdown item and click
+        const singleTxButton = this.getElement(this.singleTransactionButtonSelector);
+        await singleTxButton.waitFor({ state: 'visible', timeout: 3000 });
+        await singleTxButton.click();
+        return; // Success, exit the retry loop
+      } catch (error) {
+        if (attempt === 2) throw error; // Last attempt, rethrow
+        // Click elsewhere to close dropdown before retry
+        await this.window.keyboard.press('Escape');
+        await this.window.waitForTimeout(300);
+      }
+    }
   }
 
   async clickOnImportButton() {
@@ -461,6 +469,16 @@ export class TransactionPage extends BasePage {
 
     await this.clickOnSignAndSubmitButton();
     await this.clickSignTransactionButton();
+    // Wait for Confirm Transaction modal to close before looking for execution modal
+    await this.window.waitForSelector(
+      `[data-testid="${this.confirmTransactionModalSelector}"]`,
+      { state: 'hidden', timeout: 10000 }
+    );
+    // Wait for execution modal to APPEAR first (shows "Executing" text while tx runs)
+    await this.window.waitForSelector('text=Executing', { state: 'visible', timeout: 10000 });
+    // DON'T click Close - it's a cancel button that dismisses modal while tx still running!
+    // Wait for modal to AUTO-CLOSE when execution completes (isExecuting becomes false in Vue component)
+    await this.window.waitForSelector('text=Executing', { state: 'hidden', timeout: 30000 });
     await this.waitForCreatedAtToBeVisible();
 
     const newTransactionId = await this.getTransactionDetailsId();
@@ -482,6 +500,13 @@ export class TransactionPage extends BasePage {
     await this.clickOnCreateNewComplexKeyButton();
     await this.createComplexKeyStructure();
     await this.clickOnDoneButton();
+    // Wait for complex key modal to actually close (Done button hidden)
+    const modalClosed = await this.isElementHidden(this.doneComplexKeyButtonSelector, null, 10000);
+    if (!modalClosed) {
+      throw new Error('Complex key modal did not close within 10 seconds');
+    }
+    // Then wait for sign button to become visible and clickable
+    await this.waitForElementToBeVisible(this.signAndSubmitButtonSelector, 5000);
   }
 
   async deleteAccount(accountId: string) {
@@ -586,7 +611,7 @@ export class TransactionPage extends BasePage {
     await this.clickOnFileServiceLink();
     await this.clickOnReadCreateTransaction();
     await this.fillInFileIdForRead(fileId);
-    await this.clickOnSignAndSubmitButton();
+    await this.clickOnSignAndReadButton(); // Use query-specific method (dropdown payer, not input)
     await this.waitForElementToDisappear(this.toastMessageSelector);
     return await this.readFileContentFromTextArea();
   }
@@ -740,7 +765,27 @@ export class TransactionPage extends BasePage {
   }
 
   async clickOnSignAndSubmitButton() {
-    await this.click(this.signAndSubmitButtonSelector, null, 10000);
+    // Scroll to top to ensure button is visible, then click
+    const button = this.window.getByTestId(this.signAndSubmitButtonSelector);
+    await button.scrollIntoViewIfNeeded();
+    await button.click({ timeout: 10000 });
+  }
+
+  // For queries (FileContentsQuery, etc.) - uses dropdown for payer, not input
+  async clickOnSignAndReadButton() {
+    // For LOCALNET: Select payer from dropdown if not already selected
+    if (process.env.ENVIRONMENT?.toUpperCase() === 'LOCALNET') {
+      const payerDropdown = this.window.getByTestId(this.payerDropdownSelector);
+      // Check if dropdown exists and wait for it
+      await payerDropdown.waitFor({ state: 'visible', timeout: 10000 });
+      // The dropdown should auto-populate with imported accounts
+      // Just ensure something is selected by waiting for the button to be enabled
+    }
+
+    // Click the Sign & Read button (same testid as Sign & Submit)
+    const button = this.window.getByTestId(this.signAndSubmitButtonSelector);
+    await button.scrollIntoViewIfNeeded();
+    await button.click({ timeout: 10000 });
   }
 
   async clickSignTransactionButton() {

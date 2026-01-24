@@ -150,6 +150,9 @@ automation_javascript/playwright/.cache/
 automation_javascript/.env
 automation/data/*.bin
 automation/data/*.csv
+automation/reports/
+automation/test-results/
+test-results/
 automation_javascript/data/102.json
 
 # files with notes and scripts for manual data/image manipulation
