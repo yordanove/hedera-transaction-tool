@@ -1,5 +1,5 @@
 import { BasePage } from './BasePage.js';
-import { Page } from '@playwright/test';
+import { Page, expect } from '@playwright/test';
 import { RegistrationPage } from './RegistrationPage.js';
 import { SettingsPage } from './SettingsPage.js';
 import { TransactionPage } from './TransactionPage.js';
@@ -17,7 +17,7 @@ import {
   findNewKey,
   getAllTransactionIdsForUserObserver,
   getFirstPublicKeyByEmail,
-  getLatestNotificationStatusByEmail,
+  getLatestInAppNotificationStatusByEmail,
   getUserIdByEmail,
   insertKeyPair,
   insertUserKey,
@@ -117,7 +117,7 @@ export class OrganizationPage extends BasePage {
 
   transactionNodeTransactionIdIndexSelector = 'td-transaction-node-transaction-id-';
   transactionNodeTransactionTypeIndexSelector = 'td-transaction-node-transaction-type-';
-  transactionNodeValidStartIndexSelector = 'td-transaction-node-transaction-valid-start-';
+  transactionNodeValidStartIndexSelector = 'td-transaction-node-valid-start-';
   transactionNodeExecutedAtIndexSelector = 'td-transaction-node-transaction-executed-at-';
   transactionNodeStatusIndexSelector = 'td-transaction-node-transaction-status-';
   transactionNodeSignButtonIndexSelector = 'button-transaction-node-sign-';
@@ -167,6 +167,8 @@ export class OrganizationPage extends BasePage {
   }
 
   async signInOrganization(email: string, password: string, encryptionPassword: string) {
+    // Wait for login form to be visible (handles transition after logout)
+    await this.waitForElementToBeVisible(this.emailForOrganizationInputSelector);
     await this.fill(this.emailForOrganizationInputSelector, email);
     await this.fill(this.passwordForOrganizationInputSelector, password);
     await this.click(this.signInOrganizationButtonSelector);
@@ -370,6 +372,26 @@ export class OrganizationPage extends BasePage {
     return await this.hasBeforePseudoElement(this.transactionNodeTransactionIdIndexSelector + '0');
   }
 
+  /**
+   * Finds a transaction row by its transaction ID and checks if it has the notification indicator.
+   * This is more precise than checking index 0 when multiple transactions exist.
+   * @param transactionId - The SDK transaction ID (e.g., "0.0.123@1234567890.000000000")
+   * @returns true if the transaction row has the notification indicator, false otherwise
+   */
+  async hasNotificationForTransaction(transactionId: string): Promise<boolean> {
+    const rows = await this.window.locator(`[data-testid^="${this.transactionNodeTransactionIdIndexSelector}"]`).all();
+
+    for (let i = 0; i < rows.length; i++) {
+      const rowText = await this.getText(this.transactionNodeTransactionIdIndexSelector + i);
+
+      if (rowText && rowText.includes(transactionId)) {
+        return await this.hasBeforePseudoElement(this.transactionNodeTransactionIdIndexSelector + i);
+      }
+    }
+
+    return false;
+  }
+
   async selectModeByIndex(index: number) {
     await this.click(this.modeSelectionIndexSelector + index);
   }
@@ -385,6 +407,11 @@ export class OrganizationPage extends BasePage {
   }
 
   async logoutFromOrganization() {
+    // Close any group-related modals that may appear when navigating away
+    // "Save Group?" modal - has "Discard" button
+    await this.closeDraftModal('button-discard-group-modal', 1000);
+    // "Leave without saving group" modal - has "Discard Changes" button
+    await this.closeDraftModal('button-delete-group-modal', 1000);
     await this.selectOrganizationMode();
     await new Promise(resolve => setTimeout(resolve, 500));
     await this.settingsPage.navigateToLogout();
@@ -605,7 +632,7 @@ export class OrganizationPage extends BasePage {
     await this.moveTimeAheadBySeconds(time);
   }
 
-  async addComplexKeyAccountForTransactions() {
+  async addComplexKeyAccountForTransactions(encryptionPassword?: string) {
     await this.transactionPage.clickOnTransactionsMenuButton();
     await this.transactionPage.clickOnCreateNewTransactionButton();
     await this.transactionPage.clickOnCreateAccountTransaction();
@@ -628,9 +655,19 @@ export class OrganizationPage extends BasePage {
     const publicKey3 = await this.getFirstPublicKeyByEmail(this.users[2].email);
     await this.transactionPage.addPublicKeyAtDepth('0-1', publicKey3);
 
+    // Set inner threshold (0-1) to 2 of 2 - both users from threshold group needed
+    await this.selectOptionByValue(
+      this.transactionPage.selectThresholdValueByIndex + '0-1',
+      '2',
+    );
+
     await this.transactionPage.clickOnDoneButtonForComplexKeyCreation();
     await this.transactionPage.clickOnSignAndSubmitButton();
     await this.transactionPage.clickSignTransactionButton();
+    // Handle password modal if it appears (organization signing flow)
+    if (encryptionPassword && await this.isEncryptPasswordInputVisible()) {
+      await this.fillOrganizationEncryptionPasswordAndContinue(encryptionPassword);
+    }
     const transactionId = (await this.getTransactionDetailsId()) ?? '';
     await this.clickOnSignTransactionButton();
     const validStart = (await this.getValidStart()) ?? '';
@@ -638,6 +675,10 @@ export class OrganizationPage extends BasePage {
     const transactionResponse =
       await this.transactionPage.mirrorGetTransactionResponse(transactionId);
     this.complexAccountId.push(transactionResponse?.entity_id ?? '');
+
+    // Navigate back to transactions list to ensure clean state for next call
+    await this.transactionPage.clickOnTransactionsMenuButton();
+    await this.waitForElementToBeVisible('button-create-new');
   }
 
   async createComplexKeyAccountForUsers(numberOfUsers = 9, groupSize = 3) {
@@ -694,6 +735,8 @@ export class OrganizationPage extends BasePage {
     for (let i = 1; i < this.users.length; i++) {
       console.log(`Signing transaction for user ${i}`);
       const user = this.users[i];
+      // Close any lingering draft modals before login
+      await this.closeDraftModal('button-discard-draft-for-group-modal', 2000);
       await this.signInOrganization(user.email, user.password, encryptionPassword);
       await this.transactionPage.clickOnTransactionsMenuButton();
       await this.clickOnReadyToSignTab();
@@ -856,12 +899,27 @@ export class OrganizationPage extends BasePage {
     return await this.getText(this.transactionDetailsIdSelector, null, 5000);
   }
 
+  /**
+   * Extracts time portion (HH:MM:SS) from date string for consistent comparison.
+   * Handles both formats: "Wed, Jan 14, 2026 08:59:45 UTC" and "01/14/2026 08:59:45"
+   */
+  private normalizeDateTime(dateStr: string | null): string | null {
+    if (!dateStr) return null;
+    const timeMatch = dateStr.match(/\d{2}:\d{2}:\d{2}/);
+    return timeMatch ? timeMatch[0] : null;
+  }
+
   async getValidStart() {
-    return await this.getText(this.transactionValidStartSelector);
+    const text = await this.getText(this.transactionValidStartSelector);
+    return this.normalizeDateTime(text);
   }
 
   getComplexAccountId() {
     return this.complexAccountId[0];
+  }
+
+  async clickOnReadyForReviewTab() {
+    await this.click(this.readyForReviewTabSelector);
   }
 
   async clickOnReadyToSignTab() {
@@ -1297,6 +1355,7 @@ export class OrganizationPage extends BasePage {
   }
 
   async clickOnSignAllTransactionsButton() {
+    await this.waitForElementToBeVisible(this.signAllTransactionsButtonSelector, 10000);
     await this.click(this.signAllTransactionsButtonSelector);
   }
 
@@ -1309,11 +1368,13 @@ export class OrganizationPage extends BasePage {
   }
 
   async getReadyForSignTransactionTypeByIndex(index: number) {
-    return await this.getText(this.transactionNodeTransactionTypeIndexSelector + index);
+    const text = await this.getText(this.transactionNodeTransactionTypeIndexSelector + index);
+    return text?.trim() ?? null;
   }
 
   async getReadyForSignValidStartByIndex(index: number) {
-    return await this.getText(this.transactionNodeValidStartIndexSelector + index);
+    const text = await this.getText(this.transactionNodeValidStartIndexSelector + index);
+    return this.normalizeDateTime(text);
   }
 
   async isReadyForSignSubmitSignButtonVisibleByIndex(index: number) {
@@ -1324,16 +1385,26 @@ export class OrganizationPage extends BasePage {
     await this.click(this.transactionNodeSignButtonIndexSelector + index, null, 5000);
   }
 
+  async isReadyToSignDetailsButtonVisibleByIndex(index: number) {
+    return await this.isElementVisible(this.transactionNodeDetailsButtonIndexSelector + index);
+  }
+
+  async clickOnReadyToSignDetailsButtonByIndex(index: number) {
+    await this.click(this.transactionNodeDetailsButtonIndexSelector + index);
+  }
+
   async getInProgressTransactionIdByIndex(index: number) {
     return await this.getText(this.transactionNodeTransactionIdIndexSelector + index);
   }
 
   async getInProgressTransactionTypeByIndex(index: number) {
-    return await this.getText(this.transactionNodeTransactionTypeIndexSelector + index);
+    const text = await this.getText(this.transactionNodeTransactionTypeIndexSelector + index);
+    return text?.trim() ?? null;
   }
 
   async getInProgressValidStartByIndex(index: number) {
-    return await this.getText(this.transactionNodeValidStartIndexSelector + index);
+    const text = await this.getText(this.transactionNodeValidStartIndexSelector + index);
+    return this.normalizeDateTime(text);
   }
 
   async isInProgressDetailsButtonVisibleByIndex(index: number) {
@@ -1345,11 +1416,13 @@ export class OrganizationPage extends BasePage {
   }
 
   async getReadyForExecutionTransactionTypeByIndex(index: number) {
-    return await this.getText(this.transactionNodeTransactionTypeIndexSelector + index);
+    const text = await this.getText(this.transactionNodeTransactionTypeIndexSelector + index);
+    return text?.trim() ?? null;
   }
 
   async getReadyForExecutionValidStartByIndex(index: number) {
-    return await this.getText(this.transactionNodeValidStartIndexSelector + index);
+    const text = await this.getText(this.transactionNodeValidStartIndexSelector + index);
+    return this.normalizeDateTime(text);
   }
 
   async isReadyForExecutionDetailsButtonVisibleByIndex(index: number) {
@@ -1365,7 +1438,8 @@ export class OrganizationPage extends BasePage {
   }
 
   async getHistoryTransactionTypeByIndex(index: number) {
-    return await this.getText(this.transactionNodeTransactionTypeIndexSelector + index);
+    const text = await this.getText(this.transactionNodeTransactionTypeIndexSelector + index);
+    return text?.trim() ?? null;
   }
 
   async getHistoryTransactionStatusByIndex(index: number) {
@@ -1635,13 +1709,23 @@ export class OrganizationPage extends BasePage {
     secondUser: UserDetails,
     globalCredentials: Credentials,
   ) {
-    let notificationStatus = await getLatestNotificationStatusByEmail(secondUser.email);
+    const notificationStatus = await getLatestInAppNotificationStatusByEmail(secondUser.email);
 
     // If there's no notification or the latest is read, create a new one
     if (!notificationStatus || notificationStatus.isRead) {
       await this.createNotificationForUser(firstUser, secondUser, globalCredentials);
+
+      // Poll until the indicator notification is created by the backend (async process)
+      await expect.poll(
+        async () => {
+          const status = await getLatestInAppNotificationStatusByEmail(secondUser.email);
+          return status !== null && !status.isRead;
+        },
+        { timeout: 10000, intervals: [500] },
+      ).toBe(true);
     }
-    // If the notification exists and is unread, nothing more needs to be done
+    // If notification exists and is unread, secondUser is already logged in from createNotificationForUser
+    // with notifications fetched via the frontend fix to loggedInOrganization watcher
   }
 
   async clickOnNextTransactionButton() {

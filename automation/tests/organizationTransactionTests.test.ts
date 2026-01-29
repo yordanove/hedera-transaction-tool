@@ -2,7 +2,7 @@ import { ElectronApplication, expect, Page, test } from '@playwright/test';
 import { OrganizationPage, UserDetails } from '../pages/OrganizationPage.js';
 import { RegistrationPage } from '../pages/RegistrationPage.js';
 import { TransactionPage } from '../pages/TransactionPage.js';
-import { resetDbState, resetPostgresDbState } from '../utils/databaseUtil.js';
+import { resetDbState, resetPostgresDbState, flushRateLimiter } from '../utils/databaseUtil.js';
 import { signatureMapToV1Json } from '../utils/transactionUtil.js';
 import {
   closeApp,
@@ -98,6 +98,9 @@ test.describe('Organization Transaction tests', () => {
   });
 
   test.beforeEach(async () => {
+    // Flush rate limiter before each test to prevent "too many requests" errors
+    await flushRateLimiter();
+
     await organizationPage.signInOrganization(
       firstUser.email,
       firstUser.password,
