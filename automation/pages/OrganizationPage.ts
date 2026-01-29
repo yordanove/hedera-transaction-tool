@@ -655,10 +655,10 @@ export class OrganizationPage extends BasePage {
     const publicKey3 = await this.getFirstPublicKeyByEmail(this.users[2].email);
     await this.transactionPage.addPublicKeyAtDepth('0-1', publicKey3);
 
-    // Set inner threshold (0-1) to 1 of 2 - only 1 user from threshold group needed
+    // Set inner threshold (0-1) to 2 of 2 - both users from threshold group needed
     await this.selectOptionByValue(
       this.transactionPage.selectThresholdValueByIndex + '0-1',
-      '1',
+      '2',
     );
 
     await this.transactionPage.clickOnDoneButtonForComplexKeyCreation();
@@ -916,6 +916,10 @@ export class OrganizationPage extends BasePage {
 
   getComplexAccountId() {
     return this.complexAccountId[0];
+  }
+
+  async clickOnReadyForReviewTab() {
+    await this.click(this.readyForReviewTabSelector);
   }
 
   async clickOnReadyToSignTab() {
@@ -1351,10 +1355,7 @@ export class OrganizationPage extends BasePage {
   }
 
   async clickOnSignAllTransactionsButton() {
-    // Wait for page to fully load (spinner disappears when fullyLoaded = true)
-    await this.waitForElementToDisappear('[data-testid="div-loader"]', 2000, 30000);
-    // Now the Sign All button should be visible
-    await this.waitForElementToBeVisible(this.signAllTransactionsButtonSelector, 5000);
+    await this.waitForElementToBeVisible(this.signAllTransactionsButtonSelector, 10000);
     await this.click(this.signAllTransactionsButtonSelector);
   }
 

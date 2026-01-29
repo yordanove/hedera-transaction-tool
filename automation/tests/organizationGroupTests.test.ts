@@ -137,12 +137,14 @@ test.describe('Organization Group Tx tests', () => {
     await groupPage.addOrgAllowanceTransactionToGroup(2, complexKeyAccountId, '10');
 
     await groupPage.clickOnSignAndExecuteButton();
-    // Get txIds BEFORE confirm (same pattern as passing groupTransactionTests)
+    // Handle "Save Group?" modal if it appears (can happen with fast test execution)
+    await groupPage.closeGroupDraftModal();
+
     const txId = await groupPage.getTransactionTimestamp(0) ?? '';
     const secondTxId = await groupPage.getTransactionTimestamp(1) ?? '';
     await groupPage.clickOnConfirmGroupTransactionButton();
     await groupPage.clickOnSignAllButton();
-    await groupPage.clickOnConfirmGroupActionButton()
+    await groupPage.clickOnConfirmGroupActionButton();
     await loginPage.waitForToastToDisappear();
 
     await transactionPage.clickOnTransactionsMenuButton();
@@ -196,13 +198,12 @@ test.describe('Organization Group Tx tests', () => {
   const executeGroupFromCsvFile = async (numberOfTransactions: number, signAll: boolean): Promise<boolean> => {
     await groupPage.fillDescription('test');
     await groupPage.generateAndImportCsvFile(complexKeyAccountId, newAccountId, numberOfTransactions);
-    // Verify import succeeded by checking first transaction loaded (more reliable than toast)
-    const firstTxType = await groupPage.getTransactionType(0);
-    expect(firstTxType).toBeTruthy();
+    const message = await groupPage.getToastMessage();
+    expect(message).toBe('Import complete');
 
     await groupPage.clickOnSignAndExecuteButton();
-    // Get timestamps BEFORE confirm (same pattern as passing groupTransactionTests and working org test)
-    const timestamps = await groupPage.getAllTransactionTimestamps(numberOfTransactions);
+    // Handle "Save Group?" modal if it appears (can happen with fast test execution)
+    await groupPage.closeGroupDraftModal();
     await groupPage.clickOnConfirmGroupTransactionButton();
     await groupPage.clickOnSignAllButton();
     await groupPage.clickOnConfirmGroupActionButton();
@@ -212,6 +213,11 @@ test.describe('Organization Group Tx tests', () => {
     await organizationPage.logoutFromOrganization();
     await groupPage.logInAndSignGroupTransactionsByAllUsers(globalCredentials.password, signAll);
     await organizationPage.signInOrganization(firstUser.email, firstUser.password, globalCredentials.password);
+
+    await transactionPage.clickOnTransactionsMenuButton();
+    await organizationPage.clickOnHistoryTab();
+    const timestamps = await groupPage.getAllTransactionTimestamps(numberOfTransactions);
+
     return groupPage.verifyAllTransactionsAreSuccessful(timestamps);
   }
 
@@ -220,8 +226,7 @@ test.describe('Organization Group Tx tests', () => {
     await groupPage.fillDescription('test');
     // create a non-existing account Id
     const senderAccountId = incrementAccountId(newAccountId);
-    await groupPage.generateAndImportCsvFile(senderAccountId, newAccountId, 5);
-    const message = await groupPage.getToastMessage(true);
+    const message = await groupPage.importCsvExpectingError(senderAccountId, newAccountId, 5);
     expect(message).toBe(`Sender account ${senderAccountId} does not exist on network. Review the CSV file.`);
   });
 
@@ -229,8 +234,7 @@ test.describe('Organization Group Tx tests', () => {
     test.slow();
     await groupPage.fillDescription('test');
     const feePayerAccountId = incrementAccountId(newAccountId);
-    await groupPage.generateAndImportCsvFile(complexKeyAccountId, newAccountId, 5, feePayerAccountId);
-    const message = await groupPage.getToastMessage(true);
+    const message = await groupPage.importCsvExpectingError(complexKeyAccountId, newAccountId, 5, feePayerAccountId);
     expect(message).toBe(`Fee payer account ${feePayerAccountId} does not exist on network. Review the CSV file.`);
   });
 
@@ -238,8 +242,7 @@ test.describe('Organization Group Tx tests', () => {
     test.slow();
     await groupPage.fillDescription('test');
     const receiverAccountId = incrementAccountId(newAccountId);
-    await groupPage.generateAndImportCsvFile(complexKeyAccountId, receiverAccountId, 5);
-    const message = await groupPage.getToastMessage(true);
+    const message = await groupPage.importCsvExpectingError(complexKeyAccountId, receiverAccountId, 5);
     expect(message).toBe(`Receiver account ${receiverAccountId} does not exist on network. Review the CSV file.`);
   });
 });

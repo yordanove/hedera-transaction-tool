@@ -98,6 +98,8 @@ export const getTransactionDetails = async (transactionId: string) => {
     `transactions/${formatedTransactionId}`,
     {},
     result => result && result.transactions && result.transactions.length > 0,
+    45000,  // Increased timeout to 45 seconds for mirror node indexing
+    3000,   // Check every 3 seconds (15 retries max)
   );
 };
 
