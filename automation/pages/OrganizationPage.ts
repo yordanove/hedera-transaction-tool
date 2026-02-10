@@ -669,8 +669,15 @@ export class OrganizationPage extends BasePage {
       await this.fillOrganizationEncryptionPasswordAndContinue(encryptionPassword);
     }
     const transactionId = (await this.getTransactionDetailsId()) ?? '';
+    console.log('DEBUG: transactionId =', transactionId, 'URL:', this.window.url());
     await this.clickOnSignTransactionButton();
+    await this.closeDraftModal(); // Close "Save Draft?" modal after signing
     const validStart = (await this.getValidStart()) ?? '';
+    console.log('DEBUG: addComplexKey validStart =', JSON.stringify(validStart));
+
+    // Account Create only needs payer signature - the new account's key doesn't sign creation
+    // Navigate to Transactions and wait for execution
+    await this.transactionPage.clickOnTransactionsMenuButton();
     await waitForValidStart(validStart);
     const transactionResponse =
       await this.transactionPage.mirrorGetTransactionResponse(transactionId);
@@ -741,7 +748,7 @@ export class OrganizationPage extends BasePage {
       await this.transactionPage.clickOnTransactionsMenuButton();
       await this.clickOnReadyToSignTab();
       await this.clickOnSubmitSignButtonByTransactionId(txId);
-      await this.clickOnSignTransactionButton();
+      await this.waitForElementToDisappear('.v-toast__text');
 
       await this.logoutFromOrganization();
     }
@@ -888,7 +895,11 @@ export class OrganizationPage extends BasePage {
   }
 
   async clickOnSignTransactionButton() {
-    await this.click(this.signTransactionButtonSelector, null, 5000);
+    // SplitSignButtonDropdown component doesn't have data-testid, find by text
+    // Button text is either "Sign" or "Sign & Next"
+    const signButton = this.window.getByRole('button', { name: /^Sign/ }).first();
+    await signButton.waitFor({ state: 'visible', timeout: 15000 });
+    await signButton.click();
   }
 
   async isSignTransactionButtonVisible() {
@@ -910,8 +921,7 @@ export class OrganizationPage extends BasePage {
   }
 
   async getValidStart() {
-    const text = await this.getText(this.transactionValidStartSelector);
-    return this.normalizeDateTime(text);
+    return await this.getText(this.transactionValidStartSelector);
   }
 
   getComplexAccountId() {
@@ -1116,8 +1126,16 @@ export class OrganizationPage extends BasePage {
         isSignRequiredFromCreator,
         complexAccountId,
       ));
-      await this.signTxByAllUsersAndRefresh(globalCredentials, firstUser, txId ?? '');
+      await this.closeDraftModal();
+      console.log('DEBUG: ensureComplexFileExists txId =', txId);
+      console.log('DEBUG: ensureComplexFileExists validStart =', JSON.stringify(validStart));
+      // File Create only needs payer signature (already signed by creator)
+      // Transaction goes directly to "Awaiting Execution" - no additional signatures needed
+      await this.transactionPage.clickOnTransactionsMenuButton();
       await waitForValidStart(validStart ?? '');
+      // Wait a bit for mirror node to index the executed transaction
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      await this.clickOnHistoryTab();
       const txResponse = await this.transactionPage.mirrorGetTransactionResponse(txId ?? '');
       fileId = txResponse?.entity_id;
       this.complexFileId.push(fileId ?? '');
@@ -1576,6 +1594,30 @@ export class OrganizationPage extends BasePage {
       }
       await new Promise(resolve => setTimeout(resolve, retryDelay));
     }
+    throw new Error(
+      `Transaction ${transactionId} not found after ${maxRetries} retries`,
+    );
+  }
+
+  async clickOnReadyToSignDetailsButtonByTransactionId(
+    transactionId: string,
+    maxRetries = 10,
+    retryDelay = 1000,
+  ) {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const count = await this.countElements(this.transactionNodeTransactionIdIndexSelector);
+      for (let i = 0; i < count; i++) {
+        const id = await this.getReadyForSignTransactionIdByIndex(i);
+        if (id === transactionId) {
+          await this.clickOnReadyToSignDetailsButtonByIndex(i);
+          return;
+        }
+      }
+      await new Promise(resolve => setTimeout(resolve, retryDelay));
+    }
+    throw new Error(
+      `Transaction ${transactionId} not found after ${maxRetries} retries`,
+    );
   }
 
   async clickOnReadyForExecutionDetailsButtonByTransactionId(

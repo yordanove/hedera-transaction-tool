@@ -649,12 +649,12 @@ export class BasePage {
    * Closes the 'Save Draft?' modal if it appears during navigation.
    * This modal can block UI interactions when navigating away from unsaved transaction forms.
    * @param {string} [buttonSelector='button-discard-draft-for-group-modal'] - The selector for the discard button.
-   * @param {number} [timeout=500] - Timeout in ms to wait for the modal.
+   * @param {number} [timeout=3000] - Timeout in ms to wait for the modal.
    * @returns {Promise<void>}
    */
   async closeDraftModal(
     buttonSelector = 'button-discard-draft-for-group-modal',
-    timeout = 500,
+    timeout = 3000,
   ): Promise<void> {
     const modalButton = this.window.getByTestId(buttonSelector);
     await modalButton.waitFor({ state: 'visible', timeout }).catch(() => {});

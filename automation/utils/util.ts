@@ -35,6 +35,13 @@ export async function setupApp() {
     await loginPage.closeKeyChainModal();
   }
 
+  // Check if we need to reset app state (if user exists from previous run)
+  const isSettingsButtonVisible = await loginPage.isSettingsButtonVisible();
+  if (isSettingsButtonVisible) {
+    console.log('Existing user detected, resetting app state...');
+    await resetAppState(window, app);
+  }
+
   return { app, window };
 }
 
@@ -166,8 +173,16 @@ export function calculateTimeout(totalUsers: number, timePerUser: number): numbe
  */
 export async function waitForValidStart(dateTimeString: string, bufferSeconds = 15): Promise<void> {
   // Convert the dateTimeString to a Date object
-  // Assume that the string is in UTC format
-  const targetDate = new Date(dateTimeString + 'Z');
+  // Handle both "Wed, Feb 04, 2026 16:05:05 UTC" and ISO formats
+  let dateStr = dateTimeString;
+  if (dateStr.endsWith(' UTC')) {
+    // Replace " UTC" with " GMT" - JS Date understands GMT as UTC timezone
+    dateStr = dateStr.replace(' UTC', ' GMT');
+  } else if (!dateStr.endsWith('Z')) {
+    // Add Z suffix for ISO format strings that don't have timezone
+    dateStr = dateStr + 'Z';
+  }
+  const targetDate = new Date(dateStr);
 
   // Get the current time
   const currentDate = new Date();
