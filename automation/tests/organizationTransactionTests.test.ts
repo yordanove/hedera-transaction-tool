@@ -430,8 +430,6 @@ test.describe('Organization Transaction tests', () => {
     await organizationPage.createAccount(600, 0, false);
     const { txId } = await organizationPage.createAccount(600, 0, false);
     await transactionPage.clickOnTransactionsMenuButton();
-    // Use Details button to open transaction details, then sign from there
-    // (Sign button on row signs directly without opening details page)
     await organizationPage.clickOnReadyToSignDetailsButtonByTransactionId(txId ?? '');
     await organizationPage.clickOnSignTransactionButton();
     expect(await organizationPage.isNextTransactionButtonVisible()).toBe(true);
@@ -441,8 +439,6 @@ test.describe('Organization Transaction tests', () => {
     await organizationPage.createAccount(600, 0, false);
     const { txId } = await organizationPage.createAccount(600, 0, false);
     await transactionPage.clickOnTransactionsMenuButton();
-    // Use Details button to open transaction details, then sign from there
-    // (Sign button on row signs directly without opening details page)
     await organizationPage.clickOnReadyToSignDetailsButtonByTransactionId(txId ?? '');
     await organizationPage.clickOnSignTransactionButton();
     await organizationPage.clickOnNextTransactionButton();
@@ -526,7 +522,7 @@ test.describe('Organization Transaction tests', () => {
       complexKeyAccountId,
       globalCredentials,
       firstUser,
-      600, // 10 minutes - enough time for all users to sign
+      600,
     );
     const transactionDetails = await organizationPage.getHistoryTransactionDetails(txId ?? '');
     expect(transactionDetails?.transactionId).toBe(txId);
@@ -542,7 +538,7 @@ test.describe('Organization Transaction tests', () => {
       complexKeyAccountId,
       globalCredentials,
       firstUser,
-      600, // 10 minutes - enough time for all users to sign
+      600,
     );
     const { txId, validStart } = await organizationPage.fileUpdate(
       fileId ?? '',
@@ -567,7 +563,7 @@ test.describe('Organization Transaction tests', () => {
       complexKeyAccountId,
       globalCredentials,
       firstUser,
-      600, // 10 minutes - enough time for all users to sign
+      600,
     );
     const { txId, validStart } = await organizationPage.fileAppend(
       fileId ?? '',

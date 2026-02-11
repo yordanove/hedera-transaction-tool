@@ -669,14 +669,11 @@ export class OrganizationPage extends BasePage {
       await this.fillOrganizationEncryptionPasswordAndContinue(encryptionPassword);
     }
     const transactionId = (await this.getTransactionDetailsId()) ?? '';
-    console.log('DEBUG: transactionId =', transactionId, 'URL:', this.window.url());
     await this.clickOnSignTransactionButton();
-    await this.closeDraftModal(); // Close "Save Draft?" modal after signing
+    await this.closeDraftModal();
     const validStart = (await this.getValidStart()) ?? '';
-    console.log('DEBUG: addComplexKey validStart =', JSON.stringify(validStart));
 
-    // Account Create only needs payer signature - the new account's key doesn't sign creation
-    // Navigate to Transactions and wait for execution
+
     await this.transactionPage.clickOnTransactionsMenuButton();
     await waitForValidStart(validStart);
     const transactionResponse =
@@ -895,8 +892,6 @@ export class OrganizationPage extends BasePage {
   }
 
   async clickOnSignTransactionButton() {
-    // SplitSignButtonDropdown component doesn't have data-testid, find by text
-    // Button text is either "Sign" or "Sign & Next"
     const signButton = this.window.getByRole('button', { name: /^Sign/ }).first();
     await signButton.waitFor({ state: 'visible', timeout: 15000 });
     await signButton.click();
@@ -1127,13 +1122,8 @@ export class OrganizationPage extends BasePage {
         complexAccountId,
       ));
       await this.closeDraftModal();
-      console.log('DEBUG: ensureComplexFileExists txId =', txId);
-      console.log('DEBUG: ensureComplexFileExists validStart =', JSON.stringify(validStart));
-      // File Create only needs payer signature (already signed by creator)
-      // Transaction goes directly to "Awaiting Execution" - no additional signatures needed
       await this.transactionPage.clickOnTransactionsMenuButton();
       await waitForValidStart(validStart ?? '');
-      // Wait a bit for mirror node to index the executed transaction
       await new Promise(resolve => setTimeout(resolve, 5000));
       await this.clickOnHistoryTab();
       const txResponse = await this.transactionPage.mirrorGetTransactionResponse(txId ?? '');

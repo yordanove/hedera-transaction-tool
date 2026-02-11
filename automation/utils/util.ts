@@ -176,10 +176,8 @@ export async function waitForValidStart(dateTimeString: string, bufferSeconds = 
   // Handle both "Wed, Feb 04, 2026 16:05:05 UTC" and ISO formats
   let dateStr = dateTimeString;
   if (dateStr.endsWith(' UTC')) {
-    // Replace " UTC" with " GMT" - JS Date understands GMT as UTC timezone
     dateStr = dateStr.replace(' UTC', ' GMT');
   } else if (!dateStr.endsWith('Z')) {
-    // Add Z suffix for ISO format strings that don't have timezone
     dateStr = dateStr + 'Z';
   }
   const targetDate = new Date(dateStr);
