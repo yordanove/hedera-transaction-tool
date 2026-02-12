@@ -13,7 +13,7 @@ import {
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   attachKeys,
-  getTransactionNodesForUser,
+  getTransactionNodesForUserQuery,
   SqlBuilderService,
 } from '@app/common';
 import { EntityManager } from 'typeorm';
@@ -24,7 +24,7 @@ jest.mock('@app/common', () => {
   return {
     ...jest.requireActual('@app/common'),
     attachKeys: jest.fn(),
-    getTransactionNodesForUser: jest.fn(),
+    getTransactionNodesForUserQuery: jest.fn(),
   };
 });
 
@@ -297,7 +297,7 @@ describe('TransactionNodesService', () => {
     it('TransactionNodeCollection.READY_FOR_REVIEW => getTransactionsToApprove()', async () => {
       const mockQuery = makeMockQuery('SELECT * FROM transactions_ready_for_review');
 
-      (getTransactionNodesForUser as jest.Mock).mockReturnValue(mockQuery);
+      (getTransactionNodesForUserQuery as jest.Mock).mockReturnValue(mockQuery);
       entityManager.query.mockResolvedValue([
         singleTransactionRow1,
         groupRow3,
@@ -316,14 +316,14 @@ describe('TransactionNodesService', () => {
         groupNode3,
       ]);
 
-      expect(getTransactionNodesForUser).toHaveBeenCalledWith(
+      expect(getTransactionNodesForUserQuery).toHaveBeenCalledWith(
         sqlBuilderService,
-        user,
-        { approver: true },
         {
           statuses: TRANSACTION_STATUS_COLLECTIONS.READY_FOR_REVIEW,
           mirrorNetwork: TEST_NETWORK,
-        }
+        },
+        user,
+        { approver: true }
       );
 
       expect(entityManager.query).toHaveBeenCalledWith(mockQuery.text, mockQuery.values);
@@ -332,7 +332,7 @@ describe('TransactionNodesService', () => {
     it('TransactionNodeCollection.READY_TO_SIGN => getTransactionsToSign()', async () => {
       const mockQuery = makeMockQuery('SELECT * FROM transactions_ready_to_sign');
 
-      (getTransactionNodesForUser as jest.Mock).mockReturnValue(mockQuery);
+      (getTransactionNodesForUserQuery as jest.Mock).mockReturnValue(mockQuery);
 
       // Mock entityManager.query to return the rows
       entityManager.query.mockResolvedValue([ singleTransactionRow1 ]);
@@ -348,15 +348,15 @@ describe('TransactionNodesService', () => {
       expect(result).toEqual([ singleTransactionNode1 ]);
 
       // Verify getTransactionNodesForUser was called with correct parameters
-      expect(getTransactionNodesForUser)
+      expect(getTransactionNodesForUserQuery)
         .toHaveBeenCalledWith(
           sqlBuilderService,
-          user,
-          { signer: true },
           {
             statuses: TRANSACTION_STATUS_COLLECTIONS.READY_TO_SIGN,
             mirrorNetwork: TEST_NETWORK,
-          }
+          },
+          user,
+          { signer: true }
         );
 
       // Verify entityManager.query was called with the query
@@ -366,7 +366,7 @@ describe('TransactionNodesService', () => {
     it('TransactionNodeCollection.READY_FOR_EXECUTION => getTransactions(TransactionStatus.WAITING_FOR_EXECUTION)', async () => {
       const mockQuery = makeMockQuery('SELECT * FROM ready_for_execution');
 
-      (getTransactionNodesForUser as jest.Mock).mockReturnValue(mockQuery);
+      (getTransactionNodesForUserQuery as jest.Mock).mockReturnValue(mockQuery);
       entityManager.query.mockResolvedValue([
         singleTransactionRow1,
         singleTransactionRow2,
@@ -385,18 +385,18 @@ describe('TransactionNodesService', () => {
 
       expect(r).toStrictEqual(allNodes);
 
-      expect(getTransactionNodesForUser).toHaveBeenCalledWith(
+      expect(getTransactionNodesForUserQuery).toHaveBeenCalledWith(
         sqlBuilderService,
+        {
+          statuses: TRANSACTION_STATUS_COLLECTIONS.READY_FOR_EXECUTION,
+          mirrorNetwork: TEST_NETWORK,
+        },
         user,
         {
           signer: true,
           creator: true,
           observer: true,
           approver: true,
-        },
-        {
-          statuses: TRANSACTION_STATUS_COLLECTIONS.READY_FOR_EXECUTION,
-          mirrorNetwork: TEST_NETWORK,
         }
       );
 
@@ -406,7 +406,7 @@ describe('TransactionNodesService', () => {
     it('TransactionNodeCollection.IN_PROGRESS => getTransactions(TransactionStatus.WAITING_FOR_SIGNATURES)', async () => {
       const mockQuery = makeMockQuery('SELECT * FROM in_progress');
 
-      (getTransactionNodesForUser as jest.Mock).mockReturnValue(mockQuery);
+      (getTransactionNodesForUserQuery as jest.Mock).mockReturnValue(mockQuery);
       entityManager.query.mockResolvedValue([
         singleTransactionRow1,
         singleTransactionRow2,
@@ -425,18 +425,18 @@ describe('TransactionNodesService', () => {
 
       expect(r).toStrictEqual(allNodes);
 
-      expect(getTransactionNodesForUser).toHaveBeenCalledWith(
+      expect(getTransactionNodesForUserQuery).toHaveBeenCalledWith(
         sqlBuilderService,
+        {
+          statuses: TRANSACTION_STATUS_COLLECTIONS.IN_PROGRESS,
+          mirrorNetwork: TEST_NETWORK,
+        },
         user,
         {
           signer: true,
           creator: true,
           observer: true,
           approver: true,
-        },
-        {
-          statuses: TRANSACTION_STATUS_COLLECTIONS.IN_PROGRESS,
-          mirrorNetwork: TEST_NETWORK,
         }
       );
 
@@ -446,7 +446,7 @@ describe('TransactionNodesService', () => {
     it('TransactionNodeCollection.HISTORY => getHistoryTransactions()', async () => {
       const mockQuery = makeMockQuery('SELECT * FROM history');
 
-      (getTransactionNodesForUser as jest.Mock).mockReturnValue(mockQuery);
+      (getTransactionNodesForUserQuery as jest.Mock).mockReturnValue(mockQuery);
       entityManager.query.mockResolvedValue([
         singleTransactionRow1,
         singleTransactionRow2,
@@ -465,15 +465,8 @@ describe('TransactionNodesService', () => {
 
       expect(r).toStrictEqual(allNodes);
 
-      expect(getTransactionNodesForUser).toHaveBeenCalledWith(
+      expect(getTransactionNodesForUserQuery).toHaveBeenCalledWith(
         sqlBuilderService,
-        user,
-        {
-          signer: true,
-          creator: true,
-          observer: true,
-          approver: true,
-        },
         {
           statuses: TRANSACTION_STATUS_COLLECTIONS.HISTORY,
           types: null,
@@ -487,7 +480,7 @@ describe('TransactionNodesService', () => {
     it('status filtering is effective', async () => {
       const mockQuery = makeMockQuery('SELECT * FROM history_filtered_by_status');
 
-      (getTransactionNodesForUser as jest.Mock).mockReturnValue(mockQuery);
+      (getTransactionNodesForUserQuery as jest.Mock).mockReturnValue(mockQuery);
       entityManager.query.mockResolvedValue([]); // no rows for EXPIRED
 
       const r = await service.getTransactionNodes(
@@ -500,15 +493,8 @@ describe('TransactionNodesService', () => {
 
       expect(r).toStrictEqual([]);
 
-      expect(getTransactionNodesForUser).toHaveBeenCalledWith(
+      expect(getTransactionNodesForUserQuery).toHaveBeenCalledWith(
         sqlBuilderService,
-        user,
-        {
-          signer: true,
-          creator: true,
-          observer: true,
-          approver: true,
-        },
         {
           statuses: [TransactionStatus.EXPIRED],
           types: null,
@@ -522,7 +508,7 @@ describe('TransactionNodesService', () => {
     it('transaction type filtering is effective', async () => {
       const mockQuery = makeMockQuery('SELECT * FROM history_filtered_by_type');
 
-      (getTransactionNodesForUser as jest.Mock).mockReturnValue(mockQuery);
+      (getTransactionNodesForUserQuery as jest.Mock).mockReturnValue(mockQuery);
       entityManager.query.mockResolvedValue([]); // no rows for FILE_APPEND
 
       const r = await service.getTransactionNodes(
@@ -535,15 +521,8 @@ describe('TransactionNodesService', () => {
 
       expect(r).toStrictEqual([]);
 
-      expect(getTransactionNodesForUser).toHaveBeenCalledWith(
+      expect(getTransactionNodesForUserQuery).toHaveBeenCalledWith(
         sqlBuilderService,
-        user,
-        {
-          signer: true,
-          creator: true,
-          observer: true,
-          approver: true,
-        },
         {
           statuses: TRANSACTION_STATUS_COLLECTIONS.HISTORY,
           types: [TransactionType.FILE_APPEND],
