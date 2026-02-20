@@ -49,6 +49,7 @@ export class SettingsPage extends BasePage {
   decryptMainPrivateKeyButtonSelector = 'span-show-modal-0';
   deleteKeyPairButton = 'button-delete-keypair';
   deleteKeyButtonPrefix = 'button-delete-key-';
+  deleteKeyAllButton = 'button-delete-key-all';
   changePasswordButtonSelector = 'button-change-password';
   confirmChangePasswordButtonSelector = 'button-confirm-change-password';
   closeButtonSelector = 'button-close';
@@ -57,6 +58,9 @@ export class SettingsPage extends BasePage {
 
   // Text
   decryptedPrivateKeySelector = 'span-private-key-0';
+
+  // Input
+  selectAllKeysCheckboxSelector = 'checkbox-select-all-keys';
 
   // Prefixes
   indexCellSelectorPrefix = 'cell-index-';
@@ -160,6 +164,10 @@ export class SettingsPage extends BasePage {
     await this.click(this.continueButtonSelector, null, 25000);
   }
 
+  async clickOnDeleteKeyAllButton(): Promise<void> {
+    await this.click(this.deleteKeyAllButton)
+  }
+
   async fillInIndex(index = 1): Promise<void> {
     await this.fill(this.indexInputSelector, index.toString());
   }
@@ -208,6 +216,10 @@ export class SettingsPage extends BasePage {
     await this.click(this.ed25519ImportLinkSelector);
   }
 
+  async clickOnSelectAllKeys(): Promise<void> {
+    await this.click(this.selectAllKeysCheckboxSelector);
+  }
+
   async fillInMirrorNodeBaseURL(mirrorNodeBaseURL: string): Promise<void> {
     await this.fill(this.mirrorNodeBaseURLInputSelector, mirrorNodeBaseURL);
   }
@@ -230,10 +242,17 @@ export class SettingsPage extends BasePage {
 
   async clickOnECDSAImportButton(): Promise<void> {
     await this.click(this.ecdsaImportButtonSelector);
+    if (!(await this.isElementHidden(this.ecdsaImportButtonSelector, null, 10000))) {
+      throw new Error('Import modal did not close within 10 seconds');
+    }
+
   }
 
   async clickOnED25519ImportButton(): Promise<void> {
     await this.click(this.ed25519ImportButtonSelector);
+    if (!(await this.isElementHidden(this.ed25519ImportButtonSelector, null, 10000))) {
+      throw new Error('Import modal did not close within 10 seconds');
+    }
   }
 
   async clickOnEyeDecryptIcon(): Promise<void> {

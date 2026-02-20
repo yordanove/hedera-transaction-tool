@@ -7,11 +7,13 @@ import {
   closeApp,
   generateRandomEmail,
   generateRandomPassword,
+  getOperatorKeyEnv,
   setupApp,
   setupEnvironmentForTransactions,
   resetAppState,
 } from '../utils/util.js';
 import { Transaction } from '../../front-end/src/shared/interfaces/index.js';
+import { SettingsPage } from '../pages/SettingsPage.js';
 
 let app: ElectronApplication;
 let window: Page;
@@ -229,7 +231,7 @@ test.describe('Transaction tests', () => {
     await transactionPage.ensureAccountExists();
     const accountFromList = await transactionPage.getFirstAccountFromList();
     const updatedMemoText = 'Updated memo';
-    const maxAutoAssociationsNumber = '44';
+    const maxAutoAssociationsNumber = '-1';
     const transactionId = await transactionPage.updateAccount(
       accountFromList,
       maxAutoAssociationsNumber,
@@ -257,7 +259,7 @@ test.describe('Transaction tests', () => {
   });
 
   test('Verify that system account can be updated without account key using a superUser as the fee payer', async () => {
-    await setupEnvironmentForTransactions(window, process.env.OPERATOR_KEY);
+    await setupEnvironmentForTransactions(window, getOperatorKeyEnv());
     const newPublicKey = await transactionPage.generateRandomPublicKey();
     const transactionId = await transactionPage.updateAccountKey('0.0.100', newPublicKey, '0.0.2');
 
@@ -743,5 +745,44 @@ test.describe('Transaction tests', () => {
 
     await transactionPage.navigateToDrafts();
     await transactionPage.deleteFirstDraft();
+  });
+
+  test('Verify that deleting all keys prevent to sign and execute a draft transaction', async () => {
+    // This test is a copy of organizationSettingsTests.test.ts 'Verify that deleting all keys prevent to sign and execute a draft transaction'
+    // If you fix something here, you probably want to do the same in organizationSettingsTests.test.ts
+
+    // Go to Settings / Keys and delete all keys
+    const settingsPage = new SettingsPage(window);
+    await settingsPage.clickOnSettingsButton();
+    await settingsPage.clickOnKeysTab();
+    await settingsPage.clickOnSelectAllKeys();
+    await settingsPage.clickOnDeleteKeyAllButton();
+    await settingsPage.clickOnDeleteKeyPairButton();
+
+    // Go to Transactions and fill a new Account Update transaction
+    await transactionPage.clickOnTransactionsMenuButton();
+    await transactionPage.clickOnCreateNewTransactionButton();
+    await transactionPage.clickOnUpdateAccountTransaction();
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    await transactionPage.fillInPayerAccountId('0.0.1002');
+    await transactionPage.fillInMaxAutoAssociations('0'); // Workaround for -1 bug in maxAutoAssociations
+    await transactionPage.fillInUpdatedAccountId('0.0.1002'); // Called last because it waits for sign and submit activation
+
+    // Click Sign and Execute, Save and Goto Settings and check Settings tab is displayed
+    await transactionPage.clickOnSignAndSubmitButton();
+    await transactionPage.clickOnSaveGotoSettings();
+    await settingsPage.verifySettingsElements();
+
+    // Go back to Transactions / Drafs
+    await transactionPage.clickOnTransactionsMenuButton();
+    await transactionPage.clickOnDraftsMenuButton();
+
+    // Click Continue to edit draft transaction
+    await transactionPage.clickOnFirstDraftContinueButton();
+
+    // Click Sign and Execute, Save and Goto Settings and check Settings tab is displayed
+    await transactionPage.clickOnSignAndSubmitButton();
+    await transactionPage.clickOnGotoSettings();
+    await settingsPage.verifySettingsElements();
   });
 });

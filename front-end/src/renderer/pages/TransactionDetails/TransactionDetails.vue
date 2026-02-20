@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import type { Transaction } from '@prisma/client';
-import type { ITransactionFull } from '@shared/interfaces';
+import {
+  type INotificationReceiver,
+  type ITransactionFull,
+  NotificationType,
+  TransactionStatus,
+} from '@shared/interfaces';
 
 import { computed, onBeforeMount, ref, watch } from 'vue';
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 
 import { Transaction as SDKTransaction } from '@hashgraph/sdk';
-
-import { TransactionStatus } from '@shared/interfaces';
 import { TRANSACTION_ACTION } from '@shared/constants';
 import { CommonNetwork } from '@shared/enums';
 
@@ -18,22 +21,19 @@ import useContactsStore from '@renderer/stores/storeContacts';
 import useSetDynamicLayout, { LOGGED_IN_LAYOUT } from '@renderer/composables/useSetDynamicLayout';
 import useWebsocketSubscription from '@renderer/composables/useWebsocketSubscription';
 
-import { getTransactionGroupById, getTransactionById } from '@renderer/services/organization';
+import { getTransactionById, getTransactionGroupById } from '@renderer/services/organization';
 import { getTransaction } from '@renderer/services/transactionService';
 
+import { getTransactionPayerId, getTransactionType, getTransactionValidStart } from '@renderer/utils/sdk/transactions';
 import {
-  getTransactionPayerId,
-  getTransactionType,
-  getTransactionValidStart,
-} from '@renderer/utils/sdk/transactions';
-import {
+  computeSignatureKey,
+  getAccountIdWithChecksum,
+  getAccountNicknameFromId,
+  getStatusFromCode,
   getUInt8ArrayFromBytesString,
-  openTransactionInHashscan,
   hexToUint8Array,
   isLoggedInOrganization,
-  computeSignatureKey,
-  getAccountNicknameFromId,
-  getAccountIdWithChecksum,
+  openTransactionInHashscan,
 } from '@renderer/utils';
 
 import AppLoader from '@renderer/components/ui/AppLoader.vue';
@@ -50,11 +50,14 @@ import { AccountByIdCache } from '@renderer/caches/mirrorNode/AccountByIdCache.t
 import DateTimeString from '@renderer/components/ui/DateTimeString.vue';
 import { NodeByIdCache } from '@renderer/caches/mirrorNode/NodeByIdCache.ts';
 import TransactionId from '@renderer/components/ui/TransactionId.vue';
+import ExpiringBadge from '@renderer/pages/TransactionDetails/components/ExpiringBadge.vue';
+import useNotificationsStore from '@renderer/stores/storeNotifications.ts';
 
 /* Stores */
 const user = useUserStore();
 const network = useNetwork();
 const contacts = useContactsStore();
+const notifications = useNotificationsStore();
 
 /* Composables */
 const router = useRouter();
@@ -97,10 +100,36 @@ const creator = computed(() => {
 });
 
 const showExternal = computed(() => {
-  // External badges are displayed for the transaction creator only
-  return isLoggedInOrganization(user.selectedOrganization) ?
-    user.selectedOrganization?.userId === orgTransaction.value?.creatorId :
-    false;
+  return isLoggedInOrganization(user.selectedOrganization) && user.selectedOrganization.admin;
+});
+
+const transactionIsInProgress = computed(
+  () =>
+    orgTransaction.value &&
+    [
+      TransactionStatus.NEW,
+      TransactionStatus.WAITING_FOR_EXECUTION,
+      TransactionStatus.WAITING_FOR_SIGNATURES,
+    ].includes(orgTransaction.value.status),
+);
+
+const isTransactionFailed = computed(() => {
+  return orgTransaction.value?.status === TransactionStatus.FAILED;
+});
+
+const isManualFlagVisible = computed(() => {
+  return orgTransaction.value?.isManual && transactionIsInProgress.value;
+});
+
+const validStartDate = computed(() => {
+  return sdkTransaction.value
+    ? getTransactionValidStart(sdkTransaction.value as SDKTransaction)
+    : null;
+});
+
+const formattedId = computed(() => {
+  const id = router.currentRoute.value.params.id;
+  return id ? (Array.isArray(id) ? id[0] : id) : null;
 });
 
 /* Functions */
@@ -148,6 +177,19 @@ async function fetchTransaction() {
     return;
   }
 
+  const notificationIds = notifications.currentOrganizationNotifications
+    .filter((n: INotificationReceiver) => {
+      return (
+        n.notification.type === NotificationType.TRANSACTION_INDICATOR_SIGN &&
+        n.notification.entityId === Number(id)
+      );
+    })
+    .map(n => n.id);
+
+  if (notificationIds.length > 0) {
+    await notifications.markAsReadIds(notificationIds);
+  }
+
   if (isLoggedInOrganization(user.selectedOrganization)) {
     signatureKeyObject.value = await computeSignatureKey(
       sdkTransaction.value,
@@ -160,11 +202,6 @@ async function fetchTransaction() {
 
   feePayer.value = getTransactionPayerId(sdkTransaction.value);
 }
-
-const formattedId = computed(() => {
-  const id = router.currentRoute.value.params.id;
-  return id ? (Array.isArray(id) ? id[0] : id) : null;
-});
 
 /* Hooks */
 onBeforeMount(async () => {
@@ -251,7 +288,27 @@ const commonColClass = 'col-6 col-lg-5 col-xl-4 col-xxl-3 overflow-hidden py-3';
               </div>
 
               <!-- Transaction Status -->
-              <div v-if="orgTransaction" class="mt-5">
+              <div v-if="orgTransaction" class="d-flex flex-column gap-4 mt-5">
+                <div class="d-flex align-items-center column-gap-3 row-gap-2 flex-wrap">
+                  <h2 class="text-title text-bold">Transaction Status</h2>
+                  <span v-if="isTransactionFailed" class="badge bg-danger text-break">
+                    {{
+                      getStatusFromCode(orgTransaction?.statusCode)
+                        ? getStatusFromCode(orgTransaction?.statusCode)
+                        : 'FAILED'
+                    }}
+                  </span>
+                  <span v-else-if="isManualFlagVisible" class="badge bg-info text-break"
+                    >Manual</span
+                  >
+                  <!-- Expiring Soon Badge -->
+                  <ExpiringBadge
+                    :transaction-status="orgTransaction?.status ?? null"
+                    :valid-duration="sdkTransaction?.transactionValidDuration ?? 0"
+                    :valid-start="validStartDate"
+                    variant="countdown"
+                  />
+                </div>
                 <TransactionDetailsStatusStepper :transaction="orgTransaction" />
               </div>
 
@@ -264,7 +321,7 @@ const commonColClass = 'col-6 col-lg-5 col-xl-4 col-xxl-3 overflow-hidden py-3';
                 <ReadOnlyApproversList :approvers="orgTransaction?.approvers" />
               </div>
 
-              <hr v-if="isLoggedInOrganization(user.selectedOrganization)" class="separator my-8" />
+              <hr v-if="isLoggedInOrganization(user.selectedOrganization)" class="separator my-5" />
 
               <!-- TRANSACTION GROUP DETAILS -->
               <div v-if="groupDescription">
@@ -380,7 +437,7 @@ const commonColClass = 'col-6 col-lg-5 col-xl-4 col-xxl-3 overflow-hidden py-3';
                 <div :class="commonColClass">
                   <h4 :class="detailItemLabelClass">Valid Start</h4>
                   <p :class="detailItemValueClass" data-testid="p-transaction-details-valid-start">
-                    <DateTimeString :date="getTransactionValidStart(sdkTransaction)"/>
+                    <DateTimeString :date="getTransactionValidStart(sdkTransaction)" />
                   </p>
                 </div>
 
