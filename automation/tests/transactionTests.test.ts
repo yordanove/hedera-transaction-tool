@@ -10,6 +10,7 @@ import {
   getOperatorKeyEnv,
   setupApp,
   setupEnvironmentForTransactions,
+  resetAppState,
 } from '../utils/util.js';
 import { Transaction } from '../../front-end/src/shared/interfaces/index.js';
 import { SettingsPage } from '../pages/SettingsPage.js';
@@ -31,6 +32,13 @@ test.describe('Transaction tests', () => {
 
     // Ensure transactionPage generatedAccounts is empty
     transactionPage.generatedAccounts = [];
+
+    // Check if we need to reset app state (if user exists from previous run)
+    const isSettingsButtonVisible = await loginPage.isSettingsButtonVisible();
+    if (isSettingsButtonVisible) {
+      console.log('Existing user detected, resetting app state...');
+      await resetAppState(window, app);
+    }
 
     // Generate credentials and store them globally
     globalCredentials.email = generateRandomEmail();

@@ -118,7 +118,7 @@ export class OrganizationPage extends BasePage {
 
   transactionNodeTransactionIdIndexSelector = 'td-transaction-node-transaction-id-';
   transactionNodeTransactionTypeIndexSelector = 'td-transaction-node-transaction-type-';
-  transactionNodeValidStartIndexSelector = 'td-transaction-node-transaction-valid-start-';
+  transactionNodeValidStartIndexSelector = 'td-transaction-node-valid-start-';
   transactionNodeExecutedAtIndexSelector = 'td-transaction-node-transaction-executed-at-';
   transactionNodeStatusIndexSelector = 'td-transaction-node-transaction-status-';
   transactionNodeSignButtonIndexSelector = 'button-transaction-node-sign-';
@@ -168,6 +168,8 @@ export class OrganizationPage extends BasePage {
   }
 
   async signInOrganization(email: string, password: string, encryptionPassword: string) {
+    // Wait for login form to be visible (handles transition after logout)
+    await this.waitForElementToBeVisible(this.emailForOrganizationInputSelector);
     await this.fill(this.emailForOrganizationInputSelector, email);
     await this.fill(this.passwordForOrganizationInputSelector, password);
     await this.click(this.signInOrganizationButtonSelector);
@@ -406,6 +408,11 @@ export class OrganizationPage extends BasePage {
   }
 
   async logoutFromOrganization() {
+    // Close any group-related modals that may appear when navigating away
+    // "Save Group?" modal - has "Discard" button
+    await this.closeDraftModal('button-discard-group-modal', 1000);
+    // "Leave without saving group" modal - has "Discard Changes" button
+    await this.closeDraftModal('button-delete-group-modal', 1000);
     await this.selectOrganizationMode();
     await new Promise(resolve => setTimeout(resolve, 500));
     await this.settingsPage.navigateToLogout();
@@ -626,7 +633,7 @@ export class OrganizationPage extends BasePage {
     await this.moveTimeAheadBySeconds(time);
   }
 
-  async addComplexKeyAccountForTransactions() {
+  async addComplexKeyAccountForTransactions(encryptionPassword?: string) {
     await this.transactionPage.clickOnTransactionsMenuButton();
     await this.transactionPage.clickOnCreateNewTransactionButton();
     await this.transactionPage.clickOnCreateAccountTransaction();
@@ -649,12 +656,26 @@ export class OrganizationPage extends BasePage {
     const publicKey3 = await this.getFirstPublicKeyByEmail(this.users[2].email);
     await this.transactionPage.addPublicKeyAtDepth('0-1', publicKey3);
 
+    // Set inner threshold (0-1) to 2 of 2 - both users from threshold group needed
+    await this.selectOptionByValue(
+      this.transactionPage.selectThresholdValueByIndex + '0-1',
+      '2',
+    );
+
     await this.transactionPage.clickOnDoneButtonForComplexKeyCreation();
     await this.transactionPage.clickOnSignAndSubmitButton();
     await this.transactionPage.clickSignTransactionButton();
+    // Handle password modal if it appears (organization signing flow)
+    if (encryptionPassword && await this.isEncryptPasswordInputVisible()) {
+      await this.fillOrganizationEncryptionPasswordAndContinue(encryptionPassword);
+    }
     const transactionId = (await this.getTransactionDetailsId()) ?? '';
     await this.clickOnSignTransactionButton();
+    await this.closeDraftModal();
     const validStart = (await this.getValidStart()) ?? '';
+
+
+    await this.transactionPage.clickOnTransactionsMenuButton();
     await waitForValidStart(validStart);
     const transactionResponse =
       await this.transactionPage.mirrorGetTransactionResponse(transactionId);
@@ -719,11 +740,13 @@ export class OrganizationPage extends BasePage {
     for (let i = 1; i < this.users.length; i++) {
       console.log(`Signing transaction for user ${i}`);
       const user = this.users[i];
+      // Close any lingering draft modals before login
+      await this.closeDraftModal('button-discard-draft-for-group-modal', 2000);
       await this.signInOrganization(user.email, user.password, encryptionPassword);
       await this.transactionPage.clickOnTransactionsMenuButton();
       await this.clickOnReadyToSignTab();
       await this.clickOnSubmitSignButtonByTransactionId(txId);
-      await this.clickOnSignTransactionButton();
+      await this.waitForElementToDisappear('.v-toast__text');
 
       await this.logoutFromOrganization();
     }
@@ -870,7 +893,9 @@ export class OrganizationPage extends BasePage {
   }
 
   async clickOnSignTransactionButton() {
-    await this.click(this.signTransactionButtonSelector, null, 5000);
+    const signButton = this.window.getByRole('button', { name: /^Sign/ }).first();
+    await signButton.waitFor({ state: 'visible', timeout: 15000 });
+    await signButton.click();
   }
 
   async isSignTransactionButtonVisible() {
@@ -881,12 +906,26 @@ export class OrganizationPage extends BasePage {
     return await this.getText(this.transactionDetailsIdSelector, null, 5000);
   }
 
+  /**
+   * Extracts time portion (HH:MM:SS) from date string for consistent comparison.
+   * Handles both formats: "Wed, Jan 14, 2026 08:59:45 UTC" and "01/14/2026 08:59:45"
+   */
+  private normalizeDateTime(dateStr: string | null): string | null {
+    if (!dateStr) return null;
+    const timeMatch = dateStr.match(/\d{2}:\d{2}:\d{2}/);
+    return timeMatch ? timeMatch[0] : null;
+  }
+
   async getValidStart() {
     return await this.getText(this.transactionValidStartSelector);
   }
 
   getComplexAccountId() {
     return this.complexAccountId[0];
+  }
+
+  async clickOnReadyForReviewTab() {
+    await this.click(this.readyForReviewTabSelector);
   }
 
   async clickOnReadyToSignTab() {
@@ -1083,8 +1122,11 @@ export class OrganizationPage extends BasePage {
         isSignRequiredFromCreator,
         complexAccountId,
       ));
-      await this.signTxByAllUsersAndRefresh(globalCredentials, firstUser, txId ?? '');
+      await this.closeDraftModal();
+      await this.transactionPage.clickOnTransactionsMenuButton();
       await waitForValidStart(validStart ?? '');
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      await this.clickOnHistoryTab();
       const txResponse = await this.transactionPage.mirrorGetTransactionResponse(txId ?? '');
       fileId = txResponse?.entity_id;
       this.complexFileId.push(fileId ?? '');
@@ -1322,6 +1364,7 @@ export class OrganizationPage extends BasePage {
   }
 
   async clickOnSignAllTransactionsButton() {
+    await this.waitForElementToBeVisible(this.signAllTransactionsButtonSelector, 10000);
     await this.click(this.signAllTransactionsButtonSelector);
   }
 
@@ -1334,11 +1377,13 @@ export class OrganizationPage extends BasePage {
   }
 
   async getReadyForSignTransactionTypeByIndex(index: number) {
-    return await this.getText(this.transactionNodeTransactionTypeIndexSelector + index);
+    const text = await this.getText(this.transactionNodeTransactionTypeIndexSelector + index);
+    return text?.trim() ?? null;
   }
 
   async getReadyForSignValidStartByIndex(index: number) {
-    return await this.getText(this.transactionNodeValidStartIndexSelector + index);
+    const text = await this.getText(this.transactionNodeValidStartIndexSelector + index);
+    return this.normalizeDateTime(text);
   }
 
   async isReadyForSignSubmitSignButtonVisibleByIndex(index: number) {
@@ -1362,11 +1407,13 @@ export class OrganizationPage extends BasePage {
   }
 
   async getInProgressTransactionTypeByIndex(index: number) {
-    return await this.getText(this.transactionNodeTransactionTypeIndexSelector + index);
+    const text = await this.getText(this.transactionNodeTransactionTypeIndexSelector + index);
+    return text?.trim() ?? null;
   }
 
   async getInProgressValidStartByIndex(index: number) {
-    return await this.getText(this.transactionNodeValidStartIndexSelector + index);
+    const text = await this.getText(this.transactionNodeValidStartIndexSelector + index);
+    return this.normalizeDateTime(text);
   }
 
   async isInProgressDetailsButtonVisibleByIndex(index: number) {
@@ -1378,11 +1425,13 @@ export class OrganizationPage extends BasePage {
   }
 
   async getReadyForExecutionTransactionTypeByIndex(index: number) {
-    return await this.getText(this.transactionNodeTransactionTypeIndexSelector + index);
+    const text = await this.getText(this.transactionNodeTransactionTypeIndexSelector + index);
+    return text?.trim() ?? null;
   }
 
   async getReadyForExecutionValidStartByIndex(index: number) {
-    return await this.getText(this.transactionNodeValidStartIndexSelector + index);
+    const text = await this.getText(this.transactionNodeValidStartIndexSelector + index);
+    return this.normalizeDateTime(text);
   }
 
   async isReadyForExecutionDetailsButtonVisibleByIndex(index: number) {
@@ -1398,7 +1447,8 @@ export class OrganizationPage extends BasePage {
   }
 
   async getHistoryTransactionTypeByIndex(index: number) {
-    return await this.getText(this.transactionNodeTransactionTypeIndexSelector + index);
+    const text = await this.getText(this.transactionNodeTransactionTypeIndexSelector + index);
+    return text?.trim() ?? null;
   }
 
   async getHistoryTransactionStatusByIndex(index: number) {
@@ -1535,6 +1585,30 @@ export class OrganizationPage extends BasePage {
       }
       await new Promise(resolve => setTimeout(resolve, retryDelay));
     }
+    throw new Error(
+      `Transaction ${transactionId} not found after ${maxRetries} retries`,
+    );
+  }
+
+  async clickOnReadyToSignDetailsButtonByTransactionId(
+    transactionId: string,
+    maxRetries = 10,
+    retryDelay = 1000,
+  ) {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const count = await this.countElements(this.transactionNodeTransactionIdIndexSelector);
+      for (let i = 0; i < count; i++) {
+        const id = await this.getReadyForSignTransactionIdByIndex(i);
+        if (id === transactionId) {
+          await this.clickOnReadyToSignDetailsButtonByIndex(i);
+          return;
+        }
+      }
+      await new Promise(resolve => setTimeout(resolve, retryDelay));
+    }
+    throw new Error(
+      `Transaction ${transactionId} not found after ${maxRetries} retries`,
+    );
   }
 
   async clickOnReadyForExecutionDetailsButtonByTransactionId(

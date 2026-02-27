@@ -329,6 +329,9 @@ export class SettingsPage extends BasePage {
     }
     await this.click(this.settingsButtonSelector);
 
+    // TODO: Commented out - didn't help tests, may interfere with timing
+    // await this.closeDraftModal('button-discard-draft-for-group-modal', 2000);
+
     const isProfileTabButtonHidden = await this.isElementHidden(this.profileTabButtonSelector);
     if (isProfileTabButtonHidden) {
       console.log('Profile tab button is not visible, resetting the form');
