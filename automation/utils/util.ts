@@ -209,8 +209,14 @@ export function calculateTimeout(totalUsers: number, timePerUser: number): numbe
  */
 export async function waitForValidStart(dateTimeString: string, bufferSeconds = 15): Promise<void> {
   // Convert the dateTimeString to a Date object
-  // Assume that the string is in UTC format
-  const targetDate = new Date(dateTimeString + 'Z');
+  // Handle both "Wed, Feb 04, 2026 16:05:05 UTC" and ISO formats
+  let dateStr = dateTimeString;
+  if (dateStr.endsWith(' UTC')) {
+    dateStr = dateStr.replace(' UTC', ' GMT');
+  } else if (!dateStr.endsWith('Z')) {
+    dateStr = dateStr + 'Z';
+  }
+  const targetDate = new Date(dateStr);
 
   // Get the current time
   const currentDate = new Date();

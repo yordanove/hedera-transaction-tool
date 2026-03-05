@@ -39,6 +39,13 @@ test.describe('Organization Transaction tests', () => {
     await resetPostgresDbState();
     await flushRateLimiter();
     ({ app, window } = await setupApp());
+    // Capture browser console logs to see [TXD-DBG] instrumentation
+    window.on('console', msg => {
+      const text = msg.text();
+      if (text.includes('[TXD-DBG]') || text.includes('[SIG-AUDIT-DBG]') || text.includes('[ORG-USER-DBG]')) {
+        console.log('[BROWSER]', text);
+      }
+    });
     transactionPage = new TransactionPage(window);
     organizationPage = new OrganizationPage(window);
     registrationPage = new RegistrationPage(window);
@@ -99,11 +106,25 @@ test.describe('Organization Transaction tests', () => {
   });
 
   test.beforeEach(async () => {
+    // Flush rate limiter before each test to prevent "too many requests" errors
+    await flushRateLimiter();
+
     await organizationPage.signInOrganization(
       firstUser.email,
       firstUser.password,
       globalCredentials.password,
     );
+
+    // Wait for login toast to disappear before test starts
+    await organizationPage.waitForElementToDisappear('.v-toast__text');
+
+    // Close any draft modals that may appear
+    await organizationPage.closeDraftModal();
+
+    // CI environment stabilization
+    if (process.env.CI) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
   });
 
   test.afterEach(async () => {
@@ -172,7 +193,7 @@ test.describe('Organization Transaction tests', () => {
       globalCredentials.password,
     );
     await transactionPage.clickOnTransactionsMenuButton();
-    await organizationPage.clickOnSubmitSignButtonByTransactionId(txId ?? '');
+    await organizationPage.clickOnReadyToSignDetailsButtonByTransactionId(txId ?? '');
 
     const isStageOneCompleted = await organizationPage.isTransactionStageCompleted(0);
     expect(isStageOneCompleted).toBe(true);
@@ -198,7 +219,7 @@ test.describe('Organization Transaction tests', () => {
     );
     await transactionPage.clickOnTransactionsMenuButton();
     await organizationPage.clickOnSubmitSignButtonByTransactionId(txId ?? '');
-    await organizationPage.clickOnSignTransactionButton();
+    await organizationPage.waitForElementToDisappear('.v-toast__text');
 
     await organizationPage.logoutFromOrganization();
     await organizationPage.signInOrganization(
@@ -208,7 +229,7 @@ test.describe('Organization Transaction tests', () => {
     );
     await transactionPage.clickOnTransactionsMenuButton();
     await organizationPage.clickOnReadyToSignTab();
-    await organizationPage.clickOnSubmitSignButtonByTransactionId(txId ?? '');
+    await organizationPage.clickOnReadyToSignDetailsButtonByTransactionId(txId ?? '');
 
     const isSignerSignVisible = await organizationPage.isSecondSignerCheckmarkVisible();
     expect(isSignerSignVisible).toBe(true);
@@ -221,6 +242,7 @@ test.describe('Organization Transaction tests', () => {
       30,
       true,
     );
+    await organizationPage.closeDraftModal();
     await transactionPage.clickOnTransactionsMenuButton();
     await organizationPage.clickOnInProgressTab();
 
@@ -236,9 +258,10 @@ test.describe('Organization Transaction tests', () => {
     const { txId, validStart } = await organizationPage.updateAccount(
       complexKeyAccountId,
       'update',
-      10000,
+      600,
       true,
     );
+    await organizationPage.closeDraftModal();
     await transactionPage.clickOnTransactionsMenuButton();
     await organizationPage.logoutFromOrganization();
     await organizationPage.logInAndSignTransactionByAllUsers(
@@ -281,6 +304,7 @@ test.describe('Organization Transaction tests', () => {
       5,
       true,
     );
+    await organizationPage.closeDraftModal();
     await transactionPage.clickOnTransactionsMenuButton();
     await organizationPage.logoutFromOrganization();
     await organizationPage.logInAndSignTransactionByAllUsers(
@@ -407,7 +431,7 @@ test.describe('Organization Transaction tests', () => {
     await organizationPage.createAccount(600, 0, false);
     const { txId } = await organizationPage.createAccount(600, 0, false);
     await transactionPage.clickOnTransactionsMenuButton();
-    await organizationPage.clickOnSubmitSignButtonByTransactionId(txId ?? '');
+    await organizationPage.clickOnReadyToSignDetailsButtonByTransactionId(txId ?? '');
     await organizationPage.clickOnSignTransactionButton();
     expect(await organizationPage.isNextTransactionButtonVisible()).toBe(true);
   });
@@ -416,7 +440,7 @@ test.describe('Organization Transaction tests', () => {
     await organizationPage.createAccount(600, 0, false);
     const { txId } = await organizationPage.createAccount(600, 0, false);
     await transactionPage.clickOnTransactionsMenuButton();
-    await organizationPage.clickOnSubmitSignButtonByTransactionId(txId ?? '');
+    await organizationPage.clickOnReadyToSignDetailsButtonByTransactionId(txId ?? '');
     await organizationPage.clickOnSignTransactionButton();
     await organizationPage.clickOnNextTransactionButton();
     const currentTxId = await organizationPage.getTransactionDetailsId();
@@ -426,7 +450,9 @@ test.describe('Organization Transaction tests', () => {
 
   test('Verify next button is visible when user has multiple txs in history', async () => {
     const { txId } = await organizationPage.createAccount(1, 0, true);
+    await organizationPage.closeDraftModal();
     const { validStart } = await organizationPage.createAccount(3, 0, true);
+    await organizationPage.closeDraftModal();
     await waitForValidStart(validStart ?? '');
     await transactionPage.clickOnTransactionsMenuButton();
     await organizationPage.clickOnHistoryTab();
@@ -440,6 +466,7 @@ test.describe('Organization Transaction tests', () => {
       complexKeyAccountId,
       '15',
     );
+    await organizationPage.closeDraftModal();
     await transactionPage.clickOnTransactionsMenuButton();
     await organizationPage.logoutFromOrganization();
 
@@ -466,6 +493,7 @@ test.describe('Organization Transaction tests', () => {
   test('Verify user can execute approve allowance with complex account', async () => {
     test.slow();
     const { txId, validStart } = await organizationPage.approveAllowance(complexKeyAccountId, '10');
+    await organizationPage.closeDraftModal();
     await transactionPage.clickOnTransactionsMenuButton();
     await organizationPage.logoutFromOrganization();
 
@@ -495,6 +523,7 @@ test.describe('Organization Transaction tests', () => {
       complexKeyAccountId,
       globalCredentials,
       firstUser,
+      600,
     );
     const transactionDetails = await organizationPage.getHistoryTransactionDetails(txId ?? '');
     expect(transactionDetails?.transactionId).toBe(txId);
@@ -510,12 +539,14 @@ test.describe('Organization Transaction tests', () => {
       complexKeyAccountId,
       globalCredentials,
       firstUser,
+      600,
     );
     const { txId, validStart } = await organizationPage.fileUpdate(
       fileId ?? '',
       complexKeyAccountId,
       'newContent',
     );
+    await organizationPage.closeDraftModal();
     await organizationPage.signTxByAllUsersAndRefresh(globalCredentials, firstUser, txId ?? '');
     await waitForValidStart(validStart ?? '');
 
@@ -533,12 +564,14 @@ test.describe('Organization Transaction tests', () => {
       complexKeyAccountId,
       globalCredentials,
       firstUser,
+      600,
     );
     const { txId, validStart } = await organizationPage.fileAppend(
       fileId ?? '',
       complexKeyAccountId,
       'appendContent',
     );
+    await organizationPage.closeDraftModal();
     await organizationPage.signTxByAllUsersAndRefresh(globalCredentials, firstUser, txId ?? '');
     await waitForValidStart(validStart ?? '');
 
@@ -553,6 +586,7 @@ test.describe('Organization Transaction tests', () => {
   test('Verify user can execute account delete with complex account', async () => {
     test.slow();
     const { txId, validStart } = await organizationPage.deleteAccount(complexKeyAccountId);
+    await organizationPage.closeDraftModal();
     await organizationPage.signTxByAllUsersAndRefresh(globalCredentials, firstUser, txId ?? '');
     await waitForValidStart(validStart ?? '');
 
